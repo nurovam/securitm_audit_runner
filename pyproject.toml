@@ -1,0 +1,14 @@
+[project]
+name = "securitm-audit-runner"
+version = "0.1.0"
+description = "Core audit engine for a Linux security audit agent."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "Nurov Amir"}
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
