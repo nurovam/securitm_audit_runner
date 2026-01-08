@@ -27,3 +27,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Reports
+audit-report.json
