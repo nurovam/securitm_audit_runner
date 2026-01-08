@@ -1,0 +1,11 @@
+audit:
+  checks:
+    enabled:
+      - ssh_root_login
+      - pass_min_len
+      - uid0_only_root
+  params:
+    pass_min_len:
+      min_len: 12
+  output:
+    json: "audit-report.json"

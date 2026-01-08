@@ -1,13 +1,13 @@
 # SecurITM Audit Runner
 
 Foundational core for a Linux audit agent that will integrate with SecurITM.
-This first stage delivers the domain model and execution core (checks, registry, runner, report).
+This stage delivers the domain model, platform context, built-in checks, and a minimal CLI.
 
 ## Scope (phase 1)
 
 - Core domain objects: checks, results, report.
-- Check registry and runner.
-- Minimal package layout, ready for further development.
+- Platform context (host facts + safe adapters).
+- Built-in checks and a minimal CLI with JSON output.
 
 ## Quick start
 
@@ -15,10 +15,10 @@ This first stage delivers the domain model and execution core (checks, registry,
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
+python -m securitm_audit_agent -c configs/audit.yml -o audit-report.json
 ```
 
 ## Next steps
 
-- Add platform context (host facts, safe OS adapters).
-- Add built-in checks and plugin system.
-- Add CLI, config loader, and SecurITM API integration.
+- Add plugin system.
+- Add SecurITM API integration.

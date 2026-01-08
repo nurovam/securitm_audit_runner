@@ -1,1 +1,1 @@
-# Core has no external dependencies yet.
+PyYAML>=6.0.1
