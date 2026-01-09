@@ -52,6 +52,28 @@ class SecurITMClient:
         response.raise_for_status()
         return response.json() if response.content else {}
 
+    def ensure_asset(
+        self,
+        asset_type_slug: str,
+        name_field: str,
+        template: str,
+        import_fields: Dict[str, Any],
+        asset_name: str,
+    ) -> Dict[str, Any]:
+        name = asset_name.strip()
+        if not name:
+            raise ValueError("Asset name is missing")
+
+        asset = self.find_asset_by_name(asset_type_slug, name, name_field=name_field)
+        if asset:
+            return asset
+
+        self.import_assets(template, [import_fields])
+        asset = self.find_asset_by_name(asset_type_slug, name, name_field=name_field)
+        if asset:
+            return asset
+        raise RuntimeError("Asset import did not return a visible asset")
+
     def create_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url}/api/v2/tasks"
         response = self.session.post(url, json=payload, verify=self.verify_ssl, timeout=self.timeout)

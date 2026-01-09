@@ -9,3 +9,28 @@ audit:
       min_len: 12
   output:
     json: "audit-report.json"
+
+securitm:
+  enabled: false
+  base_url: "https://service.securitm.ru"
+  token_env: "SECURITM_TOKEN"
+  verify_ssl: true
+  assets:
+    asset_type_slug: "computer-858"
+    import_template: "Audit Agent Computers"
+    name_field: "name"
+    import_name_field: "Название"
+    import_fields:
+      Название: "{hostname}"
+      Hostname: "{hostname}"
+      IP: "{ip}"
+  tasks:
+    enabled: true
+    author_name: "audit_agent"
+    author_uuid: ""
+    responsible_uuid: ""
+    priority: 2
+    deadline_days: 7
+    name_template: "[{status}] {check_id}"
+    desc_template: "Author: {author}\\nHost: {hostname}\\nCheck: {check_id}\\nStatus: {status}\\nMessage: {message}\\nEvidence: {evidence}\\nRemediation: {remediation}"
+    desc_max_length: 5000
