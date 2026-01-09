@@ -20,8 +20,23 @@ python -m securitm_audit_agent -c configs/audit.yml -o audit-report.json
 
 ## Следующие шаги
 
-- Система плагинов.
+- Новые плагины и проверки.
 - Интеграция с API SecurITM.
+
+## Плагины
+
+Подключение плагинов выполняется через конфиг:
+
+```yaml
+audit:
+  plugins:
+    - "your_plugin.module"
+  checks:
+    builtin: true
+```
+
+Каждый плагин должен экспортировать функцию `register(registry)`,
+которая регистрирует проверки в реестре.
 
 ## Интеграция с SecurITM
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Iterable, List, Optional
 
 import requests
@@ -23,7 +24,7 @@ class SecurITMClient:
         if fields:
             url = f"{url}?{'&'.join(fields)}"
         response = self.session.get(url, verify=self.verify_ssl, timeout=self.timeout)
-        response.raise_for_status()
+        self._raise_for_status(response)
         payload = response.json()
         return payload.get("data", [])
 
@@ -49,7 +50,7 @@ class SecurITMClient:
             "assets": assets,
         }
         response = self.session.post(url, json=payload, verify=self.verify_ssl, timeout=self.timeout)
-        response.raise_for_status()
+        self._raise_for_status(response)
         return response.json() if response.content else {}
 
     def ensure_asset(
@@ -77,5 +78,20 @@ class SecurITMClient:
     def create_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url}/api/v2/tasks"
         response = self.session.post(url, json=payload, verify=self.verify_ssl, timeout=self.timeout)
-        response.raise_for_status()
+        self._raise_for_status(response)
         return response.json() if response.content else {}
+
+    def _raise_for_status(self, response: requests.Response) -> None:
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = ""
+            try:
+                payload = response.json()
+                body = json.dumps(payload, ensure_ascii=False)
+            except ValueError:
+                body = response.text or ""
+            if len(body) > 2000:
+                body = body[:2000] + "...(truncated)"
+            message = f"{exc} | response body: {body}"
+            raise requests.HTTPError(message, response=response) from None

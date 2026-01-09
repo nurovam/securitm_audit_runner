@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import logging
 import os
@@ -94,6 +95,21 @@ def _build_task_payload(
     return payload
 
 
+def _load_plugins(registry: CheckRegistry, plugins: Any) -> None:
+    if not plugins:
+        return
+    if not isinstance(plugins, list):
+        raise ValueError("audit.plugins must be a list of module paths")
+    for module_path in plugins:
+        if not isinstance(module_path, str) or not module_path.strip():
+            raise ValueError("audit.plugins entries must be non-empty strings")
+        module = importlib.import_module(module_path)
+        register = getattr(module, "register", None)
+        if not callable(register):
+            raise RuntimeError(f"Plugin {module_path} has no register(registry) function")
+        register(registry)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Linux audit runner (core)")
     parser.add_argument("-c", "--config", default="configs/audit.yml")
@@ -113,7 +129,15 @@ def main() -> None:
     config = load_config(args.config)
 
     registry = CheckRegistry()
-    register_builtin_checks(registry)
+    builtin_enabled = _get_nested(config, ["audit", "checks", "builtin"], True)
+    if builtin_enabled:
+        register_builtin_checks(registry)
+    plugins = _get_nested(config, ["audit", "plugins"], [])
+    try:
+        _load_plugins(registry, plugins)
+    except Exception as exc:  # noqa: BLE001
+        logging.error("Failed to load plugins: %s", exc)
+        sys.exit(2)
 
     enabled_checks = _get_nested(config, ["audit", "checks", "enabled"], None)
     params = _get_nested(config, ["audit", "params"], {})
