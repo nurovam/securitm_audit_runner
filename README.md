@@ -18,6 +18,11 @@ pip install -r requirements.txt
 python -m securitm_audit_agent -c configs/audit.yml -o audit-report.json
 ```
 
+PDF-отчет настраивается через `audit.output.pdf` в конфиге.
+Для русских символов нужен TTF-шрифт с поддержкой кириллицы. Укажите путь
+в `audit.output.pdf_font_path` (например,
+`/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`).
+
 ## Следующие шаги
 
 - Новые плагины и проверки.

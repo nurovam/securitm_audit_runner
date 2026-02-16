@@ -16,6 +16,7 @@ from securitm_audit_agent.config import load_config
 from securitm_audit_agent.core import AuditRunner, CheckRegistry, Status
 from securitm_audit_agent.integrations import SecurITMClient
 from securitm_audit_agent.platform import AuditContext
+from securitm_audit_agent.reporting import write_pdf_report
 
 
 def _get_nested(config: Mapping[str, Any], path: list[str], default: Any) -> Any:
@@ -160,6 +161,16 @@ def main() -> None:
             encoding="utf-8",
         )
         logging.info("Report saved to %s", output_path)
+
+    pdf_output_path = _get_nested(config, ["audit", "output", "pdf"], None)
+    pdf_font_path = _get_nested(config, ["audit", "output", "pdf_font_path"], None)
+    if pdf_output_path:
+        try:
+            write_pdf_report(report, pdf_output_path, pdf_font_path)
+        except Exception as exc:  # noqa: BLE001
+            logging.error("PDF report failed: %s", exc)
+            sys.exit(2)
+        logging.info("PDF report saved to %s", pdf_output_path)
 
     if args.no_api:
         return

@@ -46,6 +46,8 @@ audit:
     - "securitm_audit_agent.plugins.met_rekom_linux"
   output:
     json: "audit-report.json"
+    pdf: "audit-report.pdf"
+    pdf_font_path: ""
 
 securitm:
   enabled: false
