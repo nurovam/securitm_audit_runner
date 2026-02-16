@@ -25,14 +25,18 @@ python -m securitm_audit_agent -c configs/audit.yml -o audit-report.json
 
 ## Плагины
 
+В проект включен базовый плагин `securitm_audit_agent.plugins.met_rekom_linux`
+с проверками по методическим рекомендациям ФСТЭК для Linux (см. `met_rekom_linux.pdf`).
+Часть пунктов требует ручной проверки и возвращает статус `SKIP`.
+
 Подключение плагинов выполняется через конфиг:
 
 ```yaml
 audit:
   plugins:
-    - "your_plugin.module"
+    - "securitm_audit_agent.plugins.met_rekom_linux"
   checks:
-    builtin: true
+    builtin: false
 ```
 
 Каждый плагин должен экспортировать функцию `register(registry)`,
