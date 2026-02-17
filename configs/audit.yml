@@ -1,6 +1,11 @@
+# Конфигурация запуска: список проверок, плагины и параметры экспорта.
 audit:
+  # Управление включенными проверками и источниками проверок.
   checks:
+    # Встроенные проверки (True = включить базовый набор).
     builtin: false
+    # Явный список идентификаторов проверок, которые будут выполнены.
+    # Если список пустой, будут выполнены все зарегистрированные проверки.
     enabled:
       - met_2_1_1_no_empty_passwords
       - met_2_1_2_ssh_root_login
@@ -42,34 +47,60 @@ audit:
       - met_2_6_4_protected_fifos
       - met_2_6_5_protected_regular
       - met_2_6_6_suid_dumpable
+  # Список модулей плагинов, каждый модуль должен иметь функцию register(registry).
   plugins:
     - "securitm_audit_agent.plugins.met_rekom_linux"
+  # Настройки экспорта отчетов.
   output:
+    # Путь к JSON-отчету.
     json: "audit-report.json"
+    # Путь к PDF-отчету (если не нужен, оставить пустым или удалить ключ).
     pdf: "audit-report.pdf"
+    # Путь к TTF-шрифту с поддержкой кириллицы (например DejaVuSans.ttf).
     pdf_font_path: ""
 
+# Настройки интеграции с SecurITM.
 securitm:
+  # Включить/выключить интеграцию с API.
   enabled: false
+  # Базовый URL сервиса (для облака https://service.securitm.ru).
   base_url: "https://service.securitm.ru"
+  # Имя переменной окружения, где хранится токен API.
   token_env: "SECURITM_TOKEN"
+  # Проверка SSL-сертификата (true/false).
   verify_ssl: true
+  # Настройки поиска/создания активов.
   assets:
+    # Тип актива (slug из URL реестра активов).
     asset_type_slug: "computer-858"
+    # Имя шаблона импорта активов.
     import_template: "Audit Agent Computers"
+    # Поле имени актива в ответе API (обычно "name").
     name_field: "name"
+    # Ключ в import_fields, который содержит имя актива.
     import_name_field: "Название"
+    # Поля, отправляемые в импорт (строки могут содержать {hostname}/{fqdn}/{ip}).
     import_fields:
       Название: "{hostname}"
       Hostname: "{hostname}"
       IP: "{ip}"
+  # Настройки создания задач по результатам FAIL.
   tasks:
+    # Включить/выключить создание задач.
     enabled: true
+    # Имя автора в описании (не UUID).
     author_name: "audit_agent"
+    # UUID автора задачи (если пусто, поле author_uuid не передается).
     author_uuid: ""
+    # UUID ответственного (если пусто, поле responsible_uuid не передается).
     responsible_uuid: ""
+    # Приоритет задачи (1-4).
     priority: 2
+    # Срок исполнения в днях от даты запуска.
     deadline_days: 7
+    # Шаблон названия задачи.
     name_template: "[{status}] {check_id}"
+    # Шаблон описания задачи.
     desc_template: "Author: {author}\\nHost: {hostname}\\nCheck: {check_id}\\nStatus: {status}\\nMessage: {message}\\nEvidence: {evidence}\\nRemediation: {remediation}"
+    # Максимальная длина описания.
     desc_max_length: 5000
