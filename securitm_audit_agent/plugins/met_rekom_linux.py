@@ -364,7 +364,19 @@ class MetSystemCronPermsCheck(MetCheck):
         ]
         bad: List[str] = []
         found = False
+        dir_targets: List[str] = []
         for path in targets:
+            mode = _mode(ctx, path)
+            if mode is None:
+                continue
+            found = True
+            if mode & 0o033:
+                bad.append(f"{path} ({oct(mode)})")
+            if ctx.stat(path) is not None and not path.endswith("crontab"):
+                dir_targets.append(path)
+
+        # Кроме самих каталогов cron нужно проверять и файлы внутри них.
+        for path in _collect_paths(ctx, dir_targets):
             mode = _mode(ctx, path)
             if mode is None:
                 continue

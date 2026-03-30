@@ -28,7 +28,7 @@ class SecurITMClient:
         response = self.session.get(url, verify=self.verify_ssl, timeout=self.timeout)
         self._raise_for_status(response)
         payload = response.json()
-        return payload.get("data", [])
+        return self._extract_items(payload)
 
     def find_asset_by_name(
         self,
@@ -84,6 +84,85 @@ class SecurITMClient:
         response = self.session.post(url, json=payload, verify=self.verify_ssl, timeout=self.timeout)
         self._raise_for_status(response)
         return response.json() if response.content else {}
+
+    def get_tasks(
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        page: int = 1,
+        per_page: int = 100,
+    ) -> List[Dict[str, Any]]:
+        url = f"{self.base_url}/api/v2/tasks"
+        params: Dict[str, Any] = {
+            "page": page,
+            "perPage": per_page,
+        }
+        if filters:
+            params["filters"] = json.dumps(filters, ensure_ascii=False)
+        response = self.session.get(url, params=params, verify=self.verify_ssl, timeout=self.timeout)
+        self._raise_for_status(response)
+        payload = response.json()
+        return self._extract_items(payload)
+
+    def find_open_task(self, name: str, asset_uuid: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        filters: Dict[str, Any] = {
+            "fields": [
+                {"name": name, "op": "eq"},
+                {"is_done": 0, "op": "eq"},
+            ]
+        }
+        if asset_uuid:
+            filters["relations"] = [
+                {"assets.uuid": asset_uuid, "op": "eq"},
+            ]
+
+        tasks = self.get_tasks(filters=filters)
+        for task in tasks:
+            if task.get("name") != name:
+                continue
+            if asset_uuid:
+                assets = task.get("assets") or []
+                if not isinstance(assets, list):
+                    continue
+                linked_uuids = {asset.get("uuid") for asset in assets if isinstance(asset, dict)}
+                if asset_uuid not in linked_uuids:
+                    continue
+            return task
+        return None
+
+    def create_task_if_missing(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
+        name = str(payload.get("name") or "").strip()
+        assets = payload.get("assets") or []
+        asset_uuid = assets[0] if isinstance(assets, list) and assets else None
+
+        if name:
+            try:
+                existing = self.find_open_task(name, asset_uuid=asset_uuid)
+            except requests.HTTPError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code not in {401, 403, 404}:
+                    raise
+            else:
+                if existing:
+                    return existing, False
+
+        created = self.create_task(payload)
+        return created, True
+
+    def _extract_items(self, payload: Any) -> List[Dict[str, Any]]:
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if not isinstance(payload, dict):
+            return []
+
+        data = payload.get("data")
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+
+        nested_items = payload.get("items")
+        if isinstance(nested_items, list):
+            return [item for item in nested_items if isinstance(item, dict)]
+
+        return []
 
     def _raise_for_status(self, response: requests.Response) -> None:
         try:

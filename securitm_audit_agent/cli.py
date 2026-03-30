@@ -32,9 +32,7 @@ from securitm_audit_agent import __version__
 from securitm_audit_agent.checks import register_builtin_checks
 from securitm_audit_agent.config import load_config
 from securitm_audit_agent.core import AuditRunner, CheckRegistry, Status
-from securitm_audit_agent.integrations import SecurITMClient
 from securitm_audit_agent.platform import AuditContext
-from securitm_audit_agent.reporting import write_pdf_report
 
 
 def _get_nested(config: Mapping[str, Any], path: list[str], default: Any) -> Any:
@@ -194,11 +192,13 @@ def main() -> None:
     pdf_font_path = _get_nested(config, ["audit", "output", "pdf_font_path"], None)
     if pdf_output_path:
         try:
+            from securitm_audit_agent.reporting import write_pdf_report
+
             write_pdf_report(report, pdf_output_path, pdf_font_path)
         except Exception as exc:  # noqa: BLE001
             logging.error("PDF report failed: %s", exc)
-            sys.exit(2)
-        logging.info("PDF report saved to %s", pdf_output_path)
+        else:
+            logging.info("PDF report saved to %s", pdf_output_path)
 
     if args.no_api:
         return
@@ -222,6 +222,8 @@ def main() -> None:
         sys.exit(2)
 
     verify_ssl = bool(securitm_cfg.get("verify_ssl", True))
+    from securitm_audit_agent.integrations import SecurITMClient
+
     client = SecurITMClient(base_url=base_url, token=token, verify_ssl=verify_ssl)
 
     assets_cfg = securitm_cfg.get("assets", {})
@@ -254,13 +256,17 @@ def main() -> None:
         logging.error("Asset name is missing; set securitm.assets.import_name_field")
         sys.exit(2)
 
-    asset = client.ensure_asset(
-        asset_type_slug=asset_type_slug,
-        name_field=name_field,
-        template=import_template,
-        import_fields=rendered_fields,
-        asset_name=asset_name,
-    )
+    try:
+        asset = client.ensure_asset(
+            asset_type_slug=asset_type_slug,
+            name_field=name_field,
+            template=import_template,
+            import_fields=rendered_fields,
+            asset_name=asset_name,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.error("Failed to sync asset with SecurITM: %s", exc)
+        return
     asset_uuid = asset.get("uuid")
 
     tasks_cfg = securitm_cfg.get("tasks", {})
@@ -271,8 +277,15 @@ def main() -> None:
         if result.status != Status.FAIL:
             continue
         payload = _build_task_payload(result, tasks_cfg, ctx.host_facts, asset_uuid)
-        client.create_task(payload)
-        logging.info("Created task for %s", result.check_id)
+        try:
+            _task, created = client.create_task_if_missing(payload)
+        except Exception as exc:  # noqa: BLE001
+            logging.error("Failed to sync task for %s: %s", result.check_id, exc)
+            continue
+        if created:
+            logging.info("Created task for %s", result.check_id)
+        else:
+            logging.info("Open task already exists for %s", result.check_id)
 
 
 if __name__ == "__main__":
