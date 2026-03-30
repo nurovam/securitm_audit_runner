@@ -251,10 +251,10 @@ class MetPasswdGroupShadowPermsCheck(MetCheck):
 class MetRunningProcessPermsCheck(MetCheck):
     meta = CheckMeta(
         check_id="met_2_3_2_running_process_file_perms",
-        title="2.3.2 Права доступа к файлам запущенных процессов",
-        description="Проверка прав доступа к исполняемым файлам и каталогам запущенных процессов",
-        severity="medium",
-        remediation="Провести аудит прав доступа к исполняемым файлам и директориям",
+        title="2.3.2 [MANUAL] Права доступа к файлам запущенных процессов",
+        description="Требует ручного аудита прав доступа к исполняемым файлам и каталогам запущенных процессов",
+        severity="info",
+        remediation="Провести ручной аудит прав доступа к исполняемым файлам и директориям",
     )
 
     def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
@@ -265,10 +265,10 @@ class MetRunningProcessPermsCheck(MetCheck):
 class MetCronJobsPermsCheck(MetCheck):
     meta = CheckMeta(
         check_id="met_2_3_3_cron_jobs_file_perms",
-        title="2.3.3 Права доступа к файлам cron пользователей",
-        description="Проверка прав доступа к файлам, вызываемым из cron",
-        severity="medium",
-        remediation="Провести аудит файлов, выполняемых из cron",
+        title="2.3.3 [MANUAL] Права доступа к файлам cron пользователей",
+        description="Требует ручного аудита прав доступа к файлам, вызываемым из cron",
+        severity="info",
+        remediation="Провести ручной аудит файлов, выполняемых из cron",
     )
 
     def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
@@ -279,10 +279,10 @@ class MetCronJobsPermsCheck(MetCheck):
 class MetSudoExecPermsCheck(MetCheck):
     meta = CheckMeta(
         check_id="met_2_3_4_sudo_exec_file_perms",
-        title="2.3.4 Права доступа к файлам, запускаемым через sudo",
-        description="Проверка владельца и прав доступа к sudo-исполняемым файлам",
-        severity="medium",
-        remediation="Установить владельца root и chmod go-w для sudo-исполняемых файлов",
+        title="2.3.4 [MANUAL] Права доступа к файлам, запускаемым через sudo",
+        description="Требует ручного аудита владельца и прав доступа к sudo-исполняемым файлам",
+        severity="info",
+        remediation="Провести ручной аудит владельца и прав доступа к sudo-исполняемым файлам",
     )
 
     def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
@@ -408,10 +408,10 @@ class MetUserCronPermsCheck(MetCheck):
 class MetSystemBinsPermsCheck(MetCheck):
     meta = CheckMeta(
         check_id="met_2_3_8_system_bins_libs_perms",
-        title="2.3.8 Права доступа к системным бинарям и библиотекам",
-        description="Проверка прав доступа к /bin, /usr/bin, /lib и модулям ядра",
-        severity="medium",
-        remediation="Провести аудит прав доступа к системным бинарям и библиотекам",
+        title="2.3.8 [MANUAL] Права доступа к системным бинарям и библиотекам",
+        description="Требует ручного аудита прав доступа к /bin, /usr/bin, /lib и модулям ядра",
+        severity="info",
+        remediation="Провести ручной аудит прав доступа к системным бинарям и библиотекам",
     )
 
     def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
