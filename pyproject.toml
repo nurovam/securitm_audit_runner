@@ -8,6 +8,18 @@ license = {text = "MIT"}
 authors = [
   {name = "Nurov Amir"}
 ]
+dependencies = [
+  "PyYAML>=6.0.1",
+  "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+pdf = [
+  "reportlab>=4.1.0",
+]
+
+[project.scripts]
+securitm-audit = "securitm_audit_agent.cli:main"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
