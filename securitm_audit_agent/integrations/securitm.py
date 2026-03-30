@@ -112,7 +112,12 @@ class SecurITMClient:
             return created
         if isinstance(data, dict) and any(key in data for key in ("uuid", "id", "name")):
             return data
-        raise RuntimeError(f"Task creation returned no task object: {json.dumps(data, ensure_ascii=False)}")
+        status_code = getattr(response, "status_code", "unknown")
+        response_url = getattr(response, "url", url)
+        raise RuntimeError(
+            "Task creation returned no task object: "
+            f"status={status_code}, url={response_url}, body={json.dumps(data, ensure_ascii=False)}"
+        )
 
     def get_tasks(
         self,

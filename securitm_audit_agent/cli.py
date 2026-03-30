@@ -280,6 +280,13 @@ def main() -> None:
         payload = _build_task_payload(result, tasks_cfg, ctx.host_facts, asset_uuid)
         try:
             _task, created = client.create_task_if_missing(payload)
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            logging.error("Failed to sync task for %s: %s", result.check_id, exc)
+            if status_code == 429:
+                logging.error("Stopping task sync after rate limit response from SecurITM")
+                break
+            continue
         except (requests.RequestException, RuntimeError, ValueError) as exc:
             logging.error("Failed to sync task for %s: %s", result.check_id, exc)
             continue
