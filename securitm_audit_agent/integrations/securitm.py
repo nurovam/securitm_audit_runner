@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urljoin
 
@@ -10,6 +11,7 @@ import requests
 
 class SecurITMClient:
     def __init__(self, base_url: str, token: str, verify_ssl: bool = True, timeout: int = 30) -> None:
+        self.logger = logging.getLogger(__name__)
         self.base_url = base_url.rstrip("/")
         self.verify_ssl = verify_ssl
         self.timeout = timeout
@@ -26,6 +28,7 @@ class SecurITMClient:
         url = f"{self.base_url}/api/v1/assets/get/{asset_type_slug}"
         if fields:
             url = f"{url}?{'&'.join(fields)}"
+        self.logger.debug("SecurITM GET assets url=%s", url)
         response = self.session.get(url, verify=self.verify_ssl, timeout=self.timeout)
         self._raise_for_status(response)
         payload = response.json()
@@ -57,6 +60,7 @@ class SecurITMClient:
             "template": template,
             "assets": assets,
         }
+        self.logger.debug("SecurITM POST assets/import payload=%s", self._short_json(payload))
         response = self.session.post(url, json=payload, verify=self.verify_ssl, timeout=self.timeout)
         self._raise_for_status(response)
         return response.json() if response.content else {}
@@ -86,6 +90,7 @@ class SecurITMClient:
 
     def create_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url}/api/v2/tasks"
+        self.logger.debug("SecurITM POST tasks payload=%s", self._short_json(payload))
         response = self.session.post(
             url,
             json=payload,
@@ -98,6 +103,7 @@ class SecurITMClient:
             if not location:
                 raise RuntimeError("Task creation endpoint redirected without Location header")
             redirect_url = urljoin(url, location)
+            self.logger.debug("SecurITM POST tasks redirect location=%s", redirect_url)
             response = self.session.post(
                 redirect_url,
                 json=payload,
@@ -105,6 +111,13 @@ class SecurITMClient:
                 timeout=self.timeout,
                 allow_redirects=False,
             )
+        self.logger.debug(
+            "SecurITM POST tasks response status=%s url=%s content_type=%s body=%s",
+            getattr(response, "status_code", "unknown"),
+            getattr(response, "url", url),
+            response.headers.get("Content-Type") if getattr(response, "headers", None) else None,
+            self._short_text(getattr(response, "text", "")),
+        )
         self._raise_for_status(response)
         data = response.json() if response.content else {}
         created = self._extract_first_item(data)
@@ -132,6 +145,7 @@ class SecurITMClient:
         }
         if filters:
             params["filters"] = json.dumps(filters, ensure_ascii=False)
+        self.logger.debug("SecurITM GET tasks params=%s", self._short_json(params))
         response = self.session.get(url, params=params, verify=self.verify_ssl, timeout=self.timeout)
         self._raise_for_status(response)
         payload = response.json()
@@ -226,5 +240,17 @@ class SecurITMClient:
                 body = response.text or ""
             if len(body) > 2000:
                 body = body[:2000] + "...(truncated)"
-            message = f"{exc} | response body: {body}"
+            request = getattr(response, "request", None)
+            method = getattr(request, "method", "unknown")
+            url = getattr(response, "url", "unknown")
+            message = f"{method} {url} -> {exc} | response body: {body}"
             raise requests.HTTPError(message, response=response) from None
+
+    def _short_json(self, payload: Any, limit: int = 600) -> str:
+        text = json.dumps(payload, ensure_ascii=False)
+        return self._short_text(text, limit=limit)
+
+    def _short_text(self, text: str, limit: int = 600) -> str:
+        if len(text) <= limit:
+            return text
+        return text[:limit] + "...(truncated)"

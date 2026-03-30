@@ -278,6 +278,7 @@ def main() -> None:
         if result.status != Status.FAIL:
             continue
         payload = _build_task_payload(result, tasks_cfg, ctx.host_facts, asset_uuid)
+        logging.debug("Task sync payload for %s: %s", result.check_id, json.dumps(payload, ensure_ascii=False))
         try:
             _task, created = client.create_task_if_missing(payload)
         except requests.HTTPError as exc:
@@ -287,9 +288,13 @@ def main() -> None:
                 logging.error("Stopping task sync after rate limit response from SecurITM")
                 break
             continue
-        except (requests.RequestException, RuntimeError, ValueError) as exc:
+        except requests.RequestException as exc:
             logging.error("Failed to sync task for %s: %s", result.check_id, exc)
             continue
+        except (RuntimeError, ValueError) as exc:
+            logging.error("Failed to sync task for %s: %s", result.check_id, exc)
+            logging.error("Stopping task sync after non-recoverable task API response")
+            break
         if created:
             logging.info("Created task for %s", result.check_id)
         else:
