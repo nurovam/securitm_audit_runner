@@ -87,7 +87,13 @@ class SecurITMClient:
         url = f"{self.base_url}/api/v2/tasks"
         response = self.session.post(url, json=payload, verify=self.verify_ssl, timeout=self.timeout)
         self._raise_for_status(response)
-        return response.json() if response.content else {}
+        data = response.json() if response.content else {}
+        created = self._extract_first_item(data)
+        if created:
+            return created
+        if isinstance(data, dict) and any(key in data for key in ("uuid", "id", "name")):
+            return data
+        raise RuntimeError(f"Task creation returned no task object: {json.dumps(data, ensure_ascii=False)}")
 
     def get_tasks(
         self,
@@ -162,12 +168,26 @@ class SecurITMClient:
         data = payload.get("data")
         if isinstance(data, list):
             return [item for item in data if isinstance(item, dict)]
+        if isinstance(data, dict):
+            data_objects = data.get("objects")
+            if isinstance(data_objects, list):
+                return [item for item in data_objects if isinstance(item, dict)]
 
         nested_items = payload.get("items")
         if isinstance(nested_items, list):
             return [item for item in nested_items if isinstance(item, dict)]
 
+        objects = payload.get("objects")
+        if isinstance(objects, list):
+            return [item for item in objects if isinstance(item, dict)]
+
         return []
+
+    def _extract_first_item(self, payload: Any) -> Optional[Dict[str, Any]]:
+        items = self._extract_items(payload)
+        if items:
+            return items[0]
+        return None
 
     def _raise_for_status(self, response: requests.Response) -> None:
         try:

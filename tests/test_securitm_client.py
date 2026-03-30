@@ -86,3 +86,46 @@ def test_find_asset_by_name_requests_minimal_fields(monkeypatch) -> None:
     assert asset is not None
     assert captured["asset_type_slug"] == "computer-1"
     assert captured["fields"] == ["uuid", "name", "Hostname"]
+
+
+def test_get_tasks_extracts_data_objects(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+
+    class _Response:
+        content = b"1"
+
+        def json(self):
+            return {
+                "data": {
+                    "total": 1,
+                    "count": 1,
+                    "objects": [{"uuid": "task-1", "name": "Task 1"}],
+                }
+            }
+
+    monkeypatch.setattr(client.session, "get", lambda *args, **kwargs: _Response())
+    monkeypatch.setattr(client, "_raise_for_status", lambda response: None)
+
+    tasks = client.get_tasks()
+
+    assert tasks == [{"uuid": "task-1", "name": "Task 1"}]
+
+
+def test_create_task_requires_task_object(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+
+    class _Response:
+        content = b"1"
+
+        def json(self):
+            return {"ok": True}
+
+    monkeypatch.setattr(client.session, "post", lambda *args, **kwargs: _Response())
+    monkeypatch.setattr(client, "_raise_for_status", lambda response: None)
+
+    try:
+        client.create_task({"name": "Task 1", "is_done": 0})
+    except RuntimeError as exc:
+        assert "Task creation returned no task object" in str(exc)
+    else:
+        raise AssertionError("RuntimeError was not raised")
