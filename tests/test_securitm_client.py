@@ -48,6 +48,28 @@ def test_create_task_if_missing_creates_task_when_listing_forbidden(monkeypatch)
     assert task["uuid"] == "task-created"
 
 
+def test_create_task_if_missing_creates_task_when_listing_bad_request(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    payload = {
+        "name": "[FAIL] check",
+        "assets": ["asset-uuid"],
+    }
+
+    response = requests.Response()
+    response.status_code = 422
+
+    def _raise_bad_request(name, asset_uuid=None):
+        raise requests.HTTPError("unprocessable", response=response)
+
+    monkeypatch.setattr(client, "find_open_task", _raise_bad_request)
+    monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "task-created"})
+
+    task, created = client.create_task_if_missing(payload)
+
+    assert created is True
+    assert task["uuid"] == "task-created"
+
+
 def test_find_asset_by_name_requests_minimal_fields(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
     captured = {}

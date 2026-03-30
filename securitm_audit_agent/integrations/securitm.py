@@ -141,10 +141,11 @@ class SecurITMClient:
         if name:
             try:
                 existing = self.find_open_task(name, asset_uuid=asset_uuid)
-            except requests.HTTPError as exc:
-                status_code = exc.response.status_code if exc.response is not None else None
-                if status_code not in {401, 403, 404}:
-                    raise
+            except requests.RequestException:
+                # Проверка на дубль — вспомогательный шаг.
+                # Если API не даёт список задач или не принимает фильтры,
+                # всё равно пытаемся создать задачу, чтобы не терять FAIL.
+                existing = None
             else:
                 if existing:
                     return existing, False
