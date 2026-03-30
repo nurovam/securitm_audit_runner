@@ -129,3 +129,40 @@ def test_create_task_requires_task_object(monkeypatch) -> None:
         assert "Task creation returned no task object" in str(exc)
     else:
         raise AssertionError("RuntimeError was not raised")
+
+
+def test_create_task_reposts_after_redirect(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    calls = []
+
+    class _RedirectResponse:
+        content = b""
+        is_redirect = True
+        is_permanent_redirect = False
+        headers = {"Location": "/api/v2/tasks/"}
+
+    class _CreatedResponse:
+        content = b"1"
+        is_redirect = False
+        is_permanent_redirect = False
+        headers = {}
+
+        def json(self):
+            return {"uuid": "task-1", "name": "Task 1"}
+
+    responses = [_RedirectResponse(), _CreatedResponse()]
+
+    def _post(url, **kwargs):
+        calls.append(url)
+        return responses.pop(0)
+
+    monkeypatch.setattr(client.session, "post", _post)
+    monkeypatch.setattr(client, "_raise_for_status", lambda response: None)
+
+    created = client.create_task({"name": "Task 1", "is_done": 0})
+
+    assert created["uuid"] == "task-1"
+    assert calls == [
+        "https://example.test/api/v2/tasks",
+        "https://example.test/api/v2/tasks/",
+    ]

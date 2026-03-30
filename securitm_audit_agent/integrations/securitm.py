@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import urljoin
 
 import requests
 
@@ -85,7 +86,25 @@ class SecurITMClient:
 
     def create_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url}/api/v2/tasks"
-        response = self.session.post(url, json=payload, verify=self.verify_ssl, timeout=self.timeout)
+        response = self.session.post(
+            url,
+            json=payload,
+            verify=self.verify_ssl,
+            timeout=self.timeout,
+            allow_redirects=False,
+        )
+        if getattr(response, "is_redirect", False) or getattr(response, "is_permanent_redirect", False):
+            location = response.headers.get("Location")
+            if not location:
+                raise RuntimeError("Task creation endpoint redirected without Location header")
+            redirect_url = urljoin(url, location)
+            response = self.session.post(
+                redirect_url,
+                json=payload,
+                verify=self.verify_ssl,
+                timeout=self.timeout,
+                allow_redirects=False,
+            )
         self._raise_for_status(response)
         data = response.json() if response.content else {}
         created = self._extract_first_item(data)
