@@ -1,3 +1,21 @@
+# CLI для запуска аудита и интеграции с SecurITM.
+"""
+CLI entrypoint для запуска Linux-аудита.
+
+Функции файла:
+- Загружает конфиг (YAML/JSON) и нормализует параметры запуска.
+- Собирает реестр проверок: встроенные + плагины (plugins.register(registry)).
+- Формирует план проверок (enabled) и выполняет их через AuditRunner.
+- Сохраняет отчёт (JSON и опционально PDF).
+- Опционально интегрируется с SecurITM API:
+  - создаёт/обновляет актив хоста (ensure_asset),
+  - создаёт задачи по результатам FAIL.
+
+Заметки по семантике статусов:
+- FAIL  = контроль выполнен и НЕ соответствует требованиям → нужна задача.
+- ERROR = ошибка исполнения проверки/агента → это не “несоответствие” (задачи обычно не создаём).
+- SKIP  = пропущено (нет прав/не применимо/нужна ручная проверка).
+"""
 from __future__ import annotations
 
 import argparse
@@ -20,6 +38,9 @@ from securitm_audit_agent.reporting import write_pdf_report
 
 
 def _get_nested(config: Mapping[str, Any], path: list[str], default: Any) -> Any:
+    """
+    Безопасно достаёт вложенное значение из конфига по пути ключей.
+    """
     current: Any = config
     for key in path:
         if not isinstance(current, Mapping) or key not in current:
@@ -29,6 +50,12 @@ def _get_nested(config: Mapping[str, Any], path: list[str], default: Any) -> Any
 
 
 def _render_fields(fields: Dict[str, Any], values: Dict[str, Any]) -> Dict[str, Any]:
+    """Рендерит поля для импорт-шаблона SecurITM.
+
+    Если значение поля — строка, применяем format_map(values),
+    чтобы поддерживать шаблоны вида "{hostname}" / "{fqdn}" / "{ip}".
+    Остальные типы (числа/булевы/вложенные структуры) оставляем как есть.
+    """
     rendered: Dict[str, Any] = {}
     for key, value in fields.items():
         if isinstance(value, str):
@@ -104,6 +131,7 @@ def _load_plugins(registry: CheckRegistry, plugins: Any) -> None:
     for module_path in plugins:
         if not isinstance(module_path, str) or not module_path.strip():
             raise ValueError("audit.plugins entries must be non-empty strings")
+        # Плагин должен экспортировать функцию register(registry).
         module = importlib.import_module(module_path)
         register = getattr(module, "register", None)
         if not callable(register):

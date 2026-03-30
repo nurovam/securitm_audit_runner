@@ -1,3 +1,4 @@
+# Реестр проверок аудита.
 from __future__ import annotations
 
 from typing import Dict, Iterable, List
@@ -10,6 +11,7 @@ class CheckRegistry:
         self._checks: Dict[str, BaseCheck] = {}
 
     def register(self, check: BaseCheck) -> None:
+        # Защита от дублирования идентификаторов проверок.
         if check.meta.check_id in self._checks:
             raise ValueError(f"Duplicate check_id: {check.meta.check_id}")
         self._checks[check.meta.check_id] = check

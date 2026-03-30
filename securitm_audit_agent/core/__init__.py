@@ -1,3 +1,4 @@
+# Публичные объекты ядра для внешнего импорта.
 from securitm_audit_agent.core.base import BaseCheck, CheckMeta, Status
 from securitm_audit_agent.core.registry import CheckRegistry
 from securitm_audit_agent.core.report import AuditReport, AuditResult

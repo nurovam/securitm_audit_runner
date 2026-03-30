@@ -32,3 +32,6 @@ Thumbs.db
 # Reports
 audit-report.json
 audit-report.pdf
+
+# Work Data
+*.pdf

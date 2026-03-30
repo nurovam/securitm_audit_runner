@@ -1,3 +1,4 @@
+# Исполнитель проверок и агрегатор отчета.
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -27,6 +28,7 @@ class AuditRunner:
             try:
                 check = self._registry.get(check_id)
             except KeyError:
+                # Неизвестная проверка — фиксируем как ERROR, но продолжаем выполнение.
                 results.append(
                     AuditResult(
                         check_id=check_id,
@@ -43,6 +45,7 @@ class AuditRunner:
             try:
                 result = check.check(ctx, check_params)
             except Exception as exc:  # noqa: BLE001
+                # Ошибка проверки не прерывает общий запуск.
                 result = AuditResult(
                     check_id=check.meta.check_id,
                     status=Status.ERROR,

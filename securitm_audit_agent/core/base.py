@@ -1,3 +1,4 @@
+# Базовые контракты проверок и статусы аудита.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -30,4 +31,5 @@ class BaseCheck(ABC):
         raise NotImplementedError
 
 
+# Поздний импорт, чтобы избежать циклической зависимости.
 from securitm_audit_agent.core.report import AuditResult  # noqa: E402

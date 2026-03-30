@@ -1,3 +1,4 @@
+# Контекст доступа к данным хоста для проверок.
 from __future__ import annotations
 
 import os
@@ -28,6 +29,7 @@ class AuditContext:
 
     @property
     def host_facts(self) -> Dict[str, Any]:
+        # Возвращаем копию, чтобы факты нельзя было случайно изменить снаружи.
         return dict(self._host_facts)
 
     def read_file(self, path: str) -> Optional[str]:
@@ -44,6 +46,7 @@ class AuditContext:
             return None
 
     def run_cmd(self, args: list[str]) -> CommandResult:
+        # Унифицированный запуск команд с захватом stdout/stderr.
         completed = subprocess.run(
             args,
             check=False,
@@ -59,6 +62,7 @@ class AuditContext:
         )
 
     def _collect_host_facts(self) -> Dict[str, Any]:
+        # Сбор базовых сведений о хосте для отчета.
         hostname = get_hostname()
         fqdn = get_fqdn()
         ip_address = get_primary_ip(self.run_cmd)

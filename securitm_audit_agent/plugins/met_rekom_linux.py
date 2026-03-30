@@ -1,3 +1,4 @@
+# Плагин проверок по рекомендациям ФСТЭК для Linux.
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ class CmdlineParams:
 
 
 class MetCheck(BaseCheck):
+    # Базовый класс для унифицированного формирования результатов.
     def _result(self, status: Status, message: str, evidence: Optional[str]) -> AuditResult:
         return AuditResult(
             check_id=self.meta.check_id,
@@ -27,6 +29,7 @@ class MetCheck(BaseCheck):
 
 
 def _read_sysctl(ctx, key: str) -> Optional[str]:
+    # sysctl ключи читаем через /proc/sys с заменой точек на слеши.
     path = "/proc/sys/" + key.replace(".", "/")
     content = ctx.read_file(path)
     if content is None:
@@ -35,6 +38,7 @@ def _read_sysctl(ctx, key: str) -> Optional[str]:
 
 
 def _read_cmdline(ctx) -> Optional[CmdlineParams]:
+    # Разбор параметров загрузки ядра из /proc/cmdline.
     content = ctx.read_file("/proc/cmdline")
     if content is None:
         return None
@@ -82,6 +86,7 @@ def _read_passwd(ctx) -> List[Tuple[str, str, str]]:
 
 
 def _iter_sudoers_lines(ctx) -> Iterable[Tuple[str, str]]:
+    # Читаем sudoers и include-каталог, если он есть.
     paths = ["/etc/sudoers"]
     paths.extend(_glob_paths(ctx, "/etc/sudoers.d"))
 
@@ -95,6 +100,7 @@ def _iter_sudoers_lines(ctx) -> Iterable[Tuple[str, str]]:
 
 def _glob_paths(ctx, base: str) -> List[str]:
     result: List[str] = []
+    # Используем ls, чтобы не зависеть от os.listdir в контексте.
     listing = ctx.run_cmd(["/bin/sh", "-c", f"ls -1 {base} 2>/dev/null"])  # noqa: S602
     if listing.returncode != 0:
         return result
@@ -108,6 +114,7 @@ def _glob_paths(ctx, base: str) -> List[str]:
 def _collect_paths(ctx, base_paths: Iterable[str]) -> List[str]:
     result: List[str] = []
     for base in base_paths:
+        # Сканируем только первый уровень, чтобы избежать тяжёлой рекурсии.
         listing = ctx.run_cmd(["/bin/sh", "-c", f"ls -1 {base} 2>/dev/null"])  # noqa: S602
         if listing.returncode != 0:
             continue
@@ -265,6 +272,7 @@ class MetRunningProcessPermsCheck(MetCheck):
     )
 
     def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+        # Требуется ручной аудит путей и прав запущенных процессов.
         return self._result(Status.SKIP, "Manual audit required for running process files", None)
 
 
@@ -278,6 +286,7 @@ class MetCronJobsPermsCheck(MetCheck):
     )
 
     def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+        # Требуется ручной аудит файлов, вызываемых из cron.
         return self._result(Status.SKIP, "Manual audit required for cron job files", None)
 
 
@@ -291,6 +300,7 @@ class MetSudoExecPermsCheck(MetCheck):
     )
 
     def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+        # Требуется ручной аудит sudo-исполняемых файлов.
         return self._result(Status.SKIP, "Manual audit required for sudo-executed files", None)
 
 
@@ -407,6 +417,7 @@ class MetSystemBinsPermsCheck(MetCheck):
     )
 
     def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+        # Требуется ручной аудит системных бинарей и библиотек.
         return self._result(Status.SKIP, "Manual audit required for system binaries", None)
 
 

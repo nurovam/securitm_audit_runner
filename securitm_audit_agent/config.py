@@ -1,3 +1,4 @@
+# Загрузка конфигурации из YAML/JSON файлов.
 from __future__ import annotations
 
 import json
@@ -15,6 +16,7 @@ def load_config(path: str) -> Dict[str, Any]:
     if not config_path.exists():
         raise FileNotFoundError(f"Config not found: {config_path}")
 
+    # Формат определяем по расширению файла.
     if config_path.suffix in {".yml", ".yaml"}:
         if yaml is None:
             raise RuntimeError("PyYAML is required for YAML configs")

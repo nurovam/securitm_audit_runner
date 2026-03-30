@@ -1,3 +1,4 @@
+# Модели результата проверки и итогового отчета.
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ class AuditResult:
     remediation: str
 
     def to_dict(self) -> Dict[str, Any]:
+        # Готовим результат к сериализации в JSON.
         return {
             "check_id": self.check_id,
             "status": self.status.value,
@@ -36,6 +38,7 @@ class AuditReport:
     results: List[AuditResult]
 
     def to_dict(self) -> Dict[str, Any]:
+        # Временные метки приводим к UTC в ISO-формате.
         return {
             "host": self.host,
             "started_at": self.started_at.astimezone(timezone.utc).isoformat(),

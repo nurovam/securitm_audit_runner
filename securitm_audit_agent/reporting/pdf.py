@@ -1,3 +1,4 @@
+# Генерация PDF-отчета на русском языке.
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,6 +20,7 @@ FONT_CANDIDATES = [
 
 
 def _wrap_text(text: str, width: int) -> List[str]:
+    # Примитивный перенос по словам для строк отчета.
     words = text.split()
     lines: List[str] = []
     current = ""
@@ -74,6 +76,7 @@ def _resolve_font_path(font_path: Optional[str]) -> str:
             return str(candidate)
         raise FileNotFoundError(f"PDF font not found: {font_path}")
 
+    # Пытаемся найти подходящий кириллический шрифт из известных путей.
     for candidate in FONT_CANDIDATES:
         if Path(candidate).exists():
             return candidate
@@ -98,6 +101,7 @@ def write_pdf_report(report: AuditReport, path: str, font_path: Optional[str] = 
 
     for line in _build_lines(report):
         if y < 50:
+            # Переход на новую страницу при достижении нижнего поля.
             pdf.showPage()
             pdf.setFont("AuditFont", 10)
             y = height - 50

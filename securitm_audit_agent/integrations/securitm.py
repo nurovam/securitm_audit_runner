@@ -1,3 +1,4 @@
+# Клиент для API SecurITM (активы и задачи).
 from __future__ import annotations
 
 import json
@@ -20,6 +21,7 @@ class SecurITMClient:
         )
 
     def get_assets(self, asset_type_slug: str, fields: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
+        # API выгрузки активов по типу (slug).
         url = f"{self.base_url}/api/v1/assets/get/{asset_type_slug}"
         if fields:
             url = f"{url}?{'&'.join(fields)}"
@@ -44,6 +46,7 @@ class SecurITMClient:
         return None
 
     def import_assets(self, template: str, assets: List[Dict[str, Any]]) -> Dict[str, Any]:
+        # Импорт активов через шаблон SecurITM.
         url = f"{self.base_url}/api/v1/assets/import"
         payload = {
             "template": template,
@@ -70,6 +73,7 @@ class SecurITMClient:
             return asset
 
         self.import_assets(template, [import_fields])
+        # Повторный поиск после импорта.
         asset = self.find_asset_by_name(asset_type_slug, name, name_field=name_field)
         if asset:
             return asset
@@ -85,6 +89,7 @@ class SecurITMClient:
         try:
             response.raise_for_status()
         except requests.HTTPError as exc:
+            # Добавляем тело ответа для диагностики ошибок API.
             body = ""
             try:
                 payload = response.json()

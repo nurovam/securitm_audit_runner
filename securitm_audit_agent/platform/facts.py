@@ -1,3 +1,4 @@
+# Сбор базовых фактов о хосте.
 from __future__ import annotations
 
 import socket
@@ -10,6 +11,7 @@ def parse_os_release(text: str) -> Dict[str, str]:
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
+        # Формат ключ=значение, значения могут быть в кавычках.
         key, value = line.split("=", 1)
         data[key] = value.strip().strip('"')
     return data
@@ -32,6 +34,7 @@ def get_primary_ip(run_cmd) -> Optional[str]:
         parts = line.split()
         if len(parts) < 4:
             continue
+        # В выводе ip(8) адрес находится в четвертой колонке.
         addr = parts[3].split("/")[0]
         if addr:
             return addr

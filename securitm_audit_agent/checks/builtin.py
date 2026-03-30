@@ -1,3 +1,4 @@
+# Базовый набор встроенных проверок Linux.
 from __future__ import annotations
 
 from typing import Mapping, Optional
@@ -27,6 +28,7 @@ class SshRootLoginCheck(BaseCheck):
                 continue
             parts = stripped.split()
             if len(parts) >= 2 and parts[0].lower() == "permitrootlogin":
+                # Последняя встреченная директива имеет приоритет.
                 value = parts[1].lower()
         if value is None:
             return self._result(Status.FAIL, "PermitRootLogin is not set", None)
@@ -119,6 +121,7 @@ class Uid0OnlyRootCheck(BaseCheck):
             username = parts[0]
             uid = parts[2]
             if uid == "0":
+                # Любые дополнительные UID 0 считаются нарушением.
                 uid0.append(username)
 
         if uid0 == ["root"]:
@@ -137,6 +140,7 @@ class Uid0OnlyRootCheck(BaseCheck):
 
 
 def register_builtin_checks(registry) -> None:
+    # Базовый набор проверок для минимального профиля.
     registry.register(SshRootLoginCheck())
     registry.register(PassMinLenCheck())
     registry.register(Uid0OnlyRootCheck())
