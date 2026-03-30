@@ -17,7 +17,11 @@ class CheckRegistry:
         self._checks[check.meta.check_id] = check
 
     def get(self, check_id: str) -> BaseCheck:
-        return self._checks[check_id]
+        try:
+            return self._checks[check_id]
+        except KeyError as exc:
+            available = ", ".join(sorted(self._checks))
+            raise KeyError(f"Check '{check_id}' is not registered. Available: {available}") from exc
 
     def all(self) -> List[BaseCheck]:
         return list(self._checks.values())

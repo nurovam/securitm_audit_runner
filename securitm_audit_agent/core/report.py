@@ -37,12 +37,18 @@ class AuditReport:
     agent_version: str
     results: List[AuditResult]
 
+    @property
+    def duration_seconds(self) -> float:
+        # Возвращаем длительность выполнения аудита в секундах.
+        return (self.finished_at - self.started_at).total_seconds()
+
     def to_dict(self) -> Dict[str, Any]:
         # Временные метки приводим к UTC в ISO-формате.
         return {
             "host": self.host,
             "started_at": self.started_at.astimezone(timezone.utc).isoformat(),
             "finished_at": self.finished_at.astimezone(timezone.utc).isoformat(),
+            "duration_seconds": self.duration_seconds,
             "agent_version": self.agent_version,
             "results": [result.to_dict() for result in self.results],
         }

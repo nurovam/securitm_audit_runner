@@ -5,6 +5,7 @@ from typing import Mapping, Optional
 
 from securitm_audit_agent.core.base import BaseCheck, CheckMeta, Status
 from securitm_audit_agent.core.report import AuditResult
+from securitm_audit_agent.platform.protocols import AuditContextProtocol
 
 
 class SshRootLoginCheck(BaseCheck):
@@ -16,7 +17,7 @@ class SshRootLoginCheck(BaseCheck):
         remediation="Set PermitRootLogin to 'no' in /etc/ssh/sshd_config and reload sshd",
     )
 
-    def check(self, ctx, params: Mapping[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Mapping[str, object]) -> AuditResult:
         content = ctx.read_file("/etc/ssh/sshd_config")
         if content is None:
             return self._result(Status.SKIP, "sshd_config not readable", None)
@@ -37,17 +38,6 @@ class SshRootLoginCheck(BaseCheck):
             return self._result(Status.OK, f"PermitRootLogin={value}", value)
         return self._result(Status.FAIL, f"PermitRootLogin={value}", value)
 
-    def _result(self, status: Status, message: str, evidence: Optional[str]) -> AuditResult:
-        return AuditResult(
-            check_id=self.meta.check_id,
-            status=status,
-            message=message,
-            evidence=evidence,
-            severity=self.meta.severity,
-            remediation=self.meta.remediation,
-        )
-
-
 class PassMinLenCheck(BaseCheck):
     meta = CheckMeta(
         check_id="pass_min_len",
@@ -57,7 +47,7 @@ class PassMinLenCheck(BaseCheck):
         remediation="Set PASS_MIN_LEN in /etc/login.defs",
     )
 
-    def check(self, ctx, params: Mapping[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Mapping[str, object]) -> AuditResult:
         content = ctx.read_file("/etc/login.defs")
         if content is None:
             return self._result(Status.SKIP, "/etc/login.defs not readable", None)
@@ -86,17 +76,6 @@ class PassMinLenCheck(BaseCheck):
             str(value),
         )
 
-    def _result(self, status: Status, message: str, evidence: Optional[str]) -> AuditResult:
-        return AuditResult(
-            check_id=self.meta.check_id,
-            status=status,
-            message=message,
-            evidence=evidence,
-            severity=self.meta.severity,
-            remediation=self.meta.remediation,
-        )
-
-
 class Uid0OnlyRootCheck(BaseCheck):
     meta = CheckMeta(
         check_id="uid0_only_root",
@@ -106,7 +85,7 @@ class Uid0OnlyRootCheck(BaseCheck):
         remediation="Remove or change UID of extra UID 0 accounts",
     )
 
-    def check(self, ctx, params: Mapping[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Mapping[str, object]) -> AuditResult:
         content = ctx.read_file("/etc/passwd")
         if content is None:
             return self._result(Status.SKIP, "/etc/passwd not readable", None)
@@ -127,17 +106,6 @@ class Uid0OnlyRootCheck(BaseCheck):
         if uid0 == ["root"]:
             return self._result(Status.OK, "Only root has UID 0", "root")
         return self._result(Status.FAIL, f"UID 0 accounts: {', '.join(uid0)}", ",".join(uid0))
-
-    def _result(self, status: Status, message: str, evidence: Optional[str]) -> AuditResult:
-        return AuditResult(
-            check_id=self.meta.check_id,
-            status=status,
-            message=message,
-            evidence=evidence,
-            severity=self.meta.severity,
-            remediation=self.meta.remediation,
-        )
-
 
 def register_builtin_checks(registry) -> None:
     # Базовый набор проверок для минимального профиля.

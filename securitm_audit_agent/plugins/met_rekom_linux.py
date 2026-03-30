@@ -7,6 +7,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from securitm_audit_agent.checks.builtin import SshRootLoginCheck
 from securitm_audit_agent.core.base import BaseCheck, CheckMeta, Status
 from securitm_audit_agent.core.report import AuditResult
+from securitm_audit_agent.platform.protocols import AuditContextProtocol
 
 
 @dataclass
@@ -16,19 +17,11 @@ class CmdlineParams:
 
 
 class MetCheck(BaseCheck):
-    # Базовый класс для унифицированного формирования результатов.
-    def _result(self, status: Status, message: str, evidence: Optional[str]) -> AuditResult:
-        return AuditResult(
-            check_id=self.meta.check_id,
-            status=status,
-            message=message,
-            evidence=evidence,
-            severity=self.meta.severity,
-            remediation=self.meta.remediation,
-        )
+    # Базовый класс для всех проверок методических рекомендаций.
+    pass
 
 
-def _read_sysctl(ctx, key: str) -> Optional[str]:
+def _read_sysctl(ctx: AuditContextProtocol, key: str) -> Optional[str]:
     # sysctl ключи читаем через /proc/sys с заменой точек на слеши.
     path = "/proc/sys/" + key.replace(".", "/")
     content = ctx.read_file(path)
@@ -37,7 +30,7 @@ def _read_sysctl(ctx, key: str) -> Optional[str]:
     return content.strip()
 
 
-def _read_cmdline(ctx) -> Optional[CmdlineParams]:
+def _read_cmdline(ctx: AuditContextProtocol) -> Optional[CmdlineParams]:
     # Разбор параметров загрузки ядра из /proc/cmdline.
     content = ctx.read_file("/proc/cmdline")
     if content is None:
@@ -53,7 +46,7 @@ def _read_cmdline(ctx) -> Optional[CmdlineParams]:
     return CmdlineParams(params=params, flags=flags)
 
 
-def _mode(ctx, path: str) -> Optional[int]:
+def _mode(ctx: AuditContextProtocol, path: str) -> Optional[int]:
     stat = ctx.stat(path)
     if stat is None:
         return None
@@ -70,7 +63,7 @@ def _parse_group_members(line: str) -> List[str]:
     return [item for item in members.split(",") if item]
 
 
-def _read_passwd(ctx) -> List[Tuple[str, str, str]]:
+def _read_passwd(ctx: AuditContextProtocol) -> List[Tuple[str, str, str]]:
     content = ctx.read_file("/etc/passwd")
     if content is None:
         return []
@@ -85,7 +78,7 @@ def _read_passwd(ctx) -> List[Tuple[str, str, str]]:
     return users
 
 
-def _iter_sudoers_lines(ctx) -> Iterable[Tuple[str, str]]:
+def _iter_sudoers_lines(ctx: AuditContextProtocol) -> Iterable[Tuple[str, str]]:
     # Читаем sudoers и include-каталог, если он есть.
     paths = ["/etc/sudoers"]
     paths.extend(_glob_paths(ctx, "/etc/sudoers.d"))
@@ -98,7 +91,7 @@ def _iter_sudoers_lines(ctx) -> Iterable[Tuple[str, str]]:
             yield path, line
 
 
-def _glob_paths(ctx, base: str) -> List[str]:
+def _glob_paths(ctx: AuditContextProtocol, base: str) -> List[str]:
     result: List[str] = []
     # Используем ls, чтобы не зависеть от os.listdir в контексте.
     listing = ctx.run_cmd(["/bin/sh", "-c", f"ls -1 {base} 2>/dev/null"])  # noqa: S602
@@ -111,7 +104,7 @@ def _glob_paths(ctx, base: str) -> List[str]:
     return result
 
 
-def _collect_paths(ctx, base_paths: Iterable[str]) -> List[str]:
+def _collect_paths(ctx: AuditContextProtocol, base_paths: Iterable[str]) -> List[str]:
     result: List[str] = []
     for base in base_paths:
         # Сканируем только первый уровень, чтобы избежать тяжёлой рекурсии.
@@ -134,7 +127,7 @@ class MetNoEmptyPasswordsCheck(MetCheck):
         remediation="Настроить пароли или заблокировать учетные записи в /etc/shadow",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         content = ctx.read_file("/etc/shadow")
         if content is None:
             return self._result(Status.SKIP, "/etc/shadow not readable", None)
@@ -173,7 +166,7 @@ class MetSuWheelCheck(MetCheck):
         remediation="Добавить auth required pam_wheel.so use_uid в /etc/pam.d/su",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         content = ctx.read_file("/etc/pam.d/su")
         if content is None:
             return self._result(Status.SKIP, "/etc/pam.d/su not readable", None)
@@ -213,7 +206,7 @@ class MetSudoRestrictionsCheck(MetCheck):
         remediation="Ограничить правила в /etc/sudoers и /etc/sudoers.d",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         offenders: List[str] = []
         for path, line in _iter_sudoers_lines(ctx):
             stripped = line.split("#", 1)[0].strip()
@@ -241,7 +234,7 @@ class MetPasswdGroupShadowPermsCheck(MetCheck):
         remediation="Установить chmod 644 /etc/passwd /etc/group и chmod go-rwx /etc/shadow",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         issues: List[str] = []
         passwd_mode = _mode(ctx, "/etc/passwd")
         group_mode = _mode(ctx, "/etc/group")
@@ -271,7 +264,7 @@ class MetRunningProcessPermsCheck(MetCheck):
         remediation="Провести аудит прав доступа к исполняемым файлам и директориям",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         # Требуется ручной аудит путей и прав запущенных процессов.
         return self._result(Status.SKIP, "Manual audit required for running process files", None)
 
@@ -285,7 +278,7 @@ class MetCronJobsPermsCheck(MetCheck):
         remediation="Провести аудит файлов, выполняемых из cron",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         # Требуется ручной аудит файлов, вызываемых из cron.
         return self._result(Status.SKIP, "Manual audit required for cron job files", None)
 
@@ -299,7 +292,7 @@ class MetSudoExecPermsCheck(MetCheck):
         remediation="Установить владельца root и chmod go-w для sudo-исполняемых файлов",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         # Требуется ручной аудит sudo-исполняемых файлов.
         return self._result(Status.SKIP, "Manual audit required for sudo-executed files", None)
 
@@ -313,7 +306,7 @@ class MetRcServicePermsCheck(MetCheck):
         remediation="chmod o-w для файлов /etc/rc#.d и .service",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         base_paths = []
         for idx in range(0, 7):
             base_paths.append(f"/etc/rc{idx}.d")
@@ -353,7 +346,7 @@ class MetSystemCronPermsCheck(MetCheck):
         remediation="chmod go-wx для /etc/crontab и /etc/cron.*",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         targets = [
             "/etc/crontab",
             "/etc/cron.d",
@@ -400,7 +393,7 @@ class MetUserCronPermsCheck(MetCheck):
         remediation="chmod go-w для файлов в /var/spool/cron",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         targets = ["/var/spool/cron", "/var/spool/cron/crontabs"]
         files = _collect_paths(ctx, targets)
         if not files:
@@ -428,7 +421,7 @@ class MetSystemBinsPermsCheck(MetCheck):
         remediation="Провести аудит прав доступа к системным бинарям и библиотекам",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         # Требуется ручной аудит системных бинарей и библиотек.
         return self._result(Status.SKIP, "Manual audit required for system binaries", None)
 
@@ -442,7 +435,7 @@ class MetSuidSgidPermsCheck(MetCheck):
         remediation="chmod go-w для SUID/SGID файлов",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         cmd = ["/bin/sh", "-c", "find / -xdev -type f -perm /6000 -perm /0022 -print 2>/dev/null"]
         result = ctx.run_cmd(cmd)
         if result.returncode != 0:
@@ -466,7 +459,7 @@ class MetHomeFilesPermsCheck(MetCheck):
         remediation="chmod go-rwx для файлов в домашних каталогах",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         targets = [
             ".bash_history",
             ".history",
@@ -508,7 +501,7 @@ class MetHomeDirsPermsCheck(MetCheck):
         remediation="chmod 700 для домашних директорий пользователей",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         users = _read_passwd(ctx)
         bad: List[str] = []
         for user, home, _shell in users:
@@ -540,7 +533,7 @@ class MetSysctlCheck(MetCheck):
         self._key = key
         self._expected = expected
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         value = _read_sysctl(ctx, self._key)
         if value is None:
             return self._result(Status.SKIP, f"{self._key} not readable", None)
@@ -561,7 +554,7 @@ class MetSysctlMinCheck(MetCheck):
         self._key = key
         self._min = min_value
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         value = _read_sysctl(ctx, self._key)
         if value is None:
             return self._result(Status.SKIP, f"{self._key} not readable", None)
@@ -593,7 +586,7 @@ class MetCmdlineCheck(MetCheck):
         self._key = key
         self._expected = expected
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         cmdline = _read_cmdline(ctx)
         if cmdline is None:
             return self._result(Status.SKIP, "/proc/cmdline not readable", None)
@@ -626,7 +619,7 @@ class MetCmdlineMultiCheck(MetCheck):
         )
         self._expected = expected
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         cmdline = _read_cmdline(ctx)
         if cmdline is None:
             return self._result(Status.SKIP, "/proc/cmdline not readable", None)
@@ -651,7 +644,7 @@ class MetDebugfsCheck(MetCheck):
         remediation="Set debugfs=off or debugfs=no-mount in kernel cmdline",
     )
 
-    def check(self, ctx, params: Dict[str, object]) -> AuditResult:
+    def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
         cmdline = _read_cmdline(ctx)
         if cmdline is None:
             return self._result(Status.SKIP, "/proc/cmdline not readable", None)
