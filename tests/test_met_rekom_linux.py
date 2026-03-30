@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from securitm_audit_agent.core import Status
-from securitm_audit_agent.plugins.met_rekom_linux import MetSystemCronPermsCheck
+from securitm_audit_agent.plugins.met_rekom_linux import (
+    MetPasswdGroupShadowPermsCheck,
+    MetSystemCronPermsCheck,
+)
 from tests.helpers import FakeContext
 
 
@@ -30,3 +33,17 @@ def test_system_cron_check_scans_files_inside_cron_directories() -> None:
 
     assert result.status == Status.FAIL
     assert "/etc/cron.daily/backup" in (result.evidence or "")
+
+
+def test_passwd_group_shadow_check_accepts_standard_secure_modes() -> None:
+    ctx = FakeContext(
+        modes={
+            "/etc/passwd": 0o100644,
+            "/etc/group": 0o100644,
+            "/etc/shadow": 0o100600,
+        }
+    )
+
+    result = MetPasswdGroupShadowPermsCheck().check(ctx, {})
+
+    assert result.status == Status.OK

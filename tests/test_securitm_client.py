@@ -46,3 +46,21 @@ def test_create_task_if_missing_creates_task_when_listing_forbidden(monkeypatch)
 
     assert created is True
     assert task["uuid"] == "task-created"
+
+
+def test_find_asset_by_name_requests_minimal_fields(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    captured = {}
+
+    def _get_assets(asset_type_slug, fields=None):
+        captured["asset_type_slug"] = asset_type_slug
+        captured["fields"] = fields
+        return [{"uuid": "asset-1", "Hostname": "host-1"}]
+
+    monkeypatch.setattr(client, "get_assets", _get_assets)
+
+    asset = client.find_asset_by_name("computer-1", "host-1", name_field="Hostname")
+
+    assert asset is not None
+    assert captured["asset_type_slug"] == "computer-1"
+    assert captured["fields"] == ["uuid", "name", "Hostname"]

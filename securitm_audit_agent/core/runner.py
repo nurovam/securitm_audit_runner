@@ -7,6 +7,7 @@ from typing import Iterable, List, Mapping, Optional
 from securitm_audit_agent.core.base import Status
 from securitm_audit_agent.core.report import AuditReport, AuditResult
 from securitm_audit_agent.core.registry import CheckRegistry
+from securitm_audit_agent.platform.protocols import AuditContextProtocol
 
 
 class AuditRunner:
@@ -15,7 +16,7 @@ class AuditRunner:
 
     def run(
         self,
-        ctx: object,
+        ctx: AuditContextProtocol,
         enabled_ids: Optional[Iterable[str]],
         params: Mapping[str, Mapping[str, object]],
     ) -> AuditReport:
@@ -44,8 +45,8 @@ class AuditRunner:
             check_params = params.get(check_id, {})
             try:
                 result = check.check(ctx, check_params)
-            except Exception as exc:  # noqa: BLE001
-                # Ошибка проверки не прерывает общий запуск.
+            except Exception as exc:
+                # Это boundary уровня runner: ошибка отдельной проверки не должна валить весь аудит.
                 result = AuditResult(
                     check_id=check.meta.check_id,
                     status=Status.ERROR,

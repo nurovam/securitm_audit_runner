@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List, Optional
+from xml.sax.saxutils import escape
 
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from securitm_audit_agent.core.report import AuditReport
 
@@ -16,57 +18,64 @@ FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+    "C:/Windows/Fonts/calibri.ttf",
 ]
 
 
-def _wrap_text(text: str, width: int) -> List[str]:
-    # Примитивный перенос по словам для строк отчета.
-    words = text.split()
-    lines: List[str] = []
-    current = ""
-    for word in words:
-        if not current:
-            candidate = word
-        else:
-            candidate = f"{current} {word}"
-        if len(candidate) <= width:
-            current = candidate
-            continue
-        if current:
-            lines.append(current)
-            current = word
-        else:
-            lines.append(word[:width])
-            current = word[width:]
-    if current:
-        lines.append(current)
-    return lines
+def _escape(value: object) -> str:
+    return escape(str(value or ""))
 
 
-def _build_lines(report: AuditReport) -> List[str]:
+def _build_story(report: AuditReport, font_name: str) -> List[object]:
     host = report.host or {}
-    lines: List[str] = [
-        "Отчет аудита",
-        f"Хост: {host.get('hostname') or ''}",
-        f"FQDN: {host.get('fqdn') or ''}",
-        f"IP: {host.get('ip') or ''}",
-        f"Начало: {report.started_at.isoformat()}",
-        f"Окончание: {report.finished_at.isoformat()}",
-        f"Версия агента: {report.agent_version}",
-        "",
-        "Результаты:",
+    title_style = ParagraphStyle(
+        "AuditTitle",
+        fontName=font_name,
+        fontSize=15,
+        leading=18,
+        spaceAfter=8,
+    )
+    body_style = ParagraphStyle(
+        "AuditBody",
+        fontName=font_name,
+        fontSize=10,
+        leading=13,
+        spaceAfter=4,
+    )
+    section_style = ParagraphStyle(
+        "AuditSection",
+        fontName=font_name,
+        fontSize=11,
+        leading=14,
+        spaceAfter=6,
+    )
+
+    story: List[object] = [
+        Paragraph("Отчёт аудита", title_style),
+        Paragraph(f"Хост: {_escape(host.get('hostname'))}", body_style),
+        Paragraph(f"FQDN: {_escape(host.get('fqdn'))}", body_style),
+        Paragraph(f"IP: {_escape(host.get('ip'))}", body_style),
+        Paragraph(f"Начало: {_escape(report.started_at.isoformat())}", body_style),
+        Paragraph(f"Окончание: {_escape(report.finished_at.isoformat())}", body_style),
+        Paragraph(f"Длительность: {_escape(report.duration_seconds)} сек.", body_style),
+        Paragraph(f"Версия агента: {_escape(report.agent_version)}", body_style),
+        Spacer(1, 8),
+        Paragraph("Результаты", section_style),
     ]
 
     for result in report.results:
-        lines.append(f"- [{result.status.value}] {result.check_id}")
-        lines.extend(_wrap_text(f"  сообщение: {result.message}", 90))
+        story.append(Paragraph(f"<b>[{_escape(result.status.value)}] {_escape(result.check_id)}</b>", body_style))
+        story.append(Paragraph(f"Сообщение: {_escape(result.message)}", body_style))
         if result.evidence:
-            lines.extend(_wrap_text(f"  доказательства: {result.evidence}", 90))
+            story.append(Paragraph(f"Доказательства: {_escape(result.evidence)}", body_style))
         if result.remediation:
-            lines.extend(_wrap_text(f"  рекомендации: {result.remediation}", 90))
-        lines.append("")
+            story.append(Paragraph(f"Рекомендации: {_escape(result.remediation)}", body_style))
+        story.append(Spacer(1, 6))
 
-    return lines
+    return story
 
 
 def _resolve_font_path(font_path: Optional[str]) -> str:
@@ -91,21 +100,12 @@ def write_pdf_report(report: AuditReport, path: str, font_path: Optional[str] = 
     resolved_font = _resolve_font_path(font_path)
     pdfmetrics.registerFont(TTFont("AuditFont", resolved_font))
 
-    pdf = canvas.Canvas(path, pagesize=A4)
-    width, height = A4
-    x = 50
-    y = height - 50
-    line_height = 14
-
-    pdf.setFont("AuditFont", 10)
-
-    for line in _build_lines(report):
-        if y < 50:
-            # Переход на новую страницу при достижении нижнего поля.
-            pdf.showPage()
-            pdf.setFont("AuditFont", 10)
-            y = height - 50
-        pdf.drawString(x, y, line)
-        y -= line_height
-
-    pdf.save()
+    doc = SimpleDocTemplate(
+        path,
+        pagesize=A4,
+        leftMargin=40,
+        rightMargin=40,
+        topMargin=40,
+        bottomMargin=40,
+    )
+    doc.build(_build_story(report, "AuditFont"))

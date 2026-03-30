@@ -36,7 +36,11 @@ class SecurITMClient:
         name: str,
         name_field: str = "name",
     ) -> Optional[Dict[str, Any]]:
-        assets = self.get_assets(asset_type_slug)
+        requested_fields = ["uuid", "name"]
+        if name_field not in requested_fields:
+            requested_fields.append(name_field)
+
+        assets = self.get_assets(asset_type_slug, fields=requested_fields)
         for asset in assets:
             candidate = asset.get(name_field) or asset.get("name")
             if not isinstance(candidate, str):

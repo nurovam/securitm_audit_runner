@@ -1,4 +1,4 @@
-# SecurITM Audit Runner
+# SecurITM Audit Agent
 
 Modular Linux security audit agent with SecurITM integration.
 

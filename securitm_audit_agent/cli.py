@@ -162,7 +162,7 @@ def main() -> None:
     plugins = _get_nested(config, ["audit", "plugins"], [])
     try:
         _load_plugins(registry, plugins)
-    except Exception as exc:  # noqa: BLE001
+    except (ImportError, AttributeError, RuntimeError, TypeError, ValueError) as exc:
         logging.error("Failed to load plugins: %s", exc)
         sys.exit(2)
 
@@ -195,7 +195,7 @@ def main() -> None:
             from securitm_audit_agent.reporting import write_pdf_report
 
             write_pdf_report(report, pdf_output_path, pdf_font_path)
-        except Exception as exc:  # noqa: BLE001
+        except (ImportError, FileNotFoundError, OSError, RuntimeError, ValueError) as exc:
             logging.error("PDF report failed: %s", exc)
         else:
             logging.info("PDF report saved to %s", pdf_output_path)
@@ -221,6 +221,7 @@ def main() -> None:
         logging.error("securitm.base_url is not set")
         sys.exit(2)
 
+    import requests
     verify_ssl = bool(securitm_cfg.get("verify_ssl", True))
     from securitm_audit_agent.integrations import SecurITMClient
 
@@ -264,7 +265,7 @@ def main() -> None:
             import_fields=rendered_fields,
             asset_name=asset_name,
         )
-    except Exception as exc:  # noqa: BLE001
+    except (requests.RequestException, RuntimeError, ValueError) as exc:
         logging.error("Failed to sync asset with SecurITM: %s", exc)
         return
     asset_uuid = asset.get("uuid")
@@ -279,7 +280,7 @@ def main() -> None:
         payload = _build_task_payload(result, tasks_cfg, ctx.host_facts, asset_uuid)
         try:
             _task, created = client.create_task_if_missing(payload)
-        except Exception as exc:  # noqa: BLE001
+        except (requests.RequestException, RuntimeError, ValueError) as exc:
             logging.error("Failed to sync task for %s: %s", result.check_id, exc)
             continue
         if created:

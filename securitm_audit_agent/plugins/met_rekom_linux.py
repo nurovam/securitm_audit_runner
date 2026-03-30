@@ -429,9 +429,9 @@ class MetSuidSgidPermsCheck(MetCheck):
     )
 
     def check(self, ctx: AuditContextProtocol, params: Dict[str, object]) -> AuditResult:
-        cmd = ["/bin/sh", "-c", "find / -xdev -type f -perm /6000 -perm /0022 -print 2>/dev/null"]
+        cmd = ["find", "/", "-xdev", "-type", "f", "-perm", "/6000", "-perm", "/0022", "-print"]
         result = ctx.run_cmd(cmd)
-        if result.returncode != 0:
+        if result.returncode not in {0, 1}:
             return self._result(Status.SKIP, "find failed for SUID/SGID scan", None)
 
         bad = [line.strip() for line in result.stdout.splitlines() if line.strip()]
