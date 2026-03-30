@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "Modular Linux security audit agent with SecurITM integration."
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   {name = "Nurov Amir"}
 ]
@@ -26,6 +27,11 @@ securitm-audit = "securitm_audit_agent.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+namespaces = false
+include = ["securitm_audit_agent*"]
+exclude = ["tests*"]
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
