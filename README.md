@@ -7,6 +7,9 @@
 
 - План исправлений и технического долга: `docs/BACKLOG.md`
 - Правила работы с репозиторием: `CONTRIBUTING.md`
+- Changelog: `CHANGELOG.md`
+- English README: `README.en.md`
+- Политика ручных проверок: `docs/MANUAL_CHECKS.md`
 
 ## Объём работ (этап 1)
 
@@ -123,8 +126,9 @@ export SECURITM_TOKEN="ВАШ_ТОКЕН"
 ## Плагины
 
 В проект включен базовый плагин `securitm_audit_agent.plugins.met_rekom_linux`
-с проверками по методическим рекомендациям ФСТЭК для Linux (см. `met_rekom_linux.pdf`).
+с проверками по методическим рекомендациям ФСТЭК для Linux.
 Часть пунктов требует ручной проверки и возвращает статус `SKIP`.
+Подробности вынесены в `docs/MANUAL_CHECKS.md`.
 
 Подключение плагинов выполняется через конфиг:
 
