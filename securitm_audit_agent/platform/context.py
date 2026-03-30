@@ -45,6 +45,12 @@ class AuditContext:
         except (FileNotFoundError, PermissionError):
             return None
 
+    def list_dir(self, path: str) -> Optional[list[str]]:
+        try:
+            return sorted(os.listdir(path))
+        except (FileNotFoundError, NotADirectoryError, PermissionError):
+            return None
+
     def run_cmd(self, args: list[str]) -> CommandResult:
         # Унифицированный запуск команд с захватом stdout/stderr.
         completed = subprocess.run(

@@ -92,27 +92,20 @@ def _iter_sudoers_lines(ctx: AuditContextProtocol) -> Iterable[Tuple[str, str]]:
 
 
 def _glob_paths(ctx: AuditContextProtocol, base: str) -> List[str]:
-    result: List[str] = []
-    # Используем ls, чтобы не зависеть от os.listdir в контексте.
-    listing = ctx.run_cmd(["/bin/sh", "-c", f"ls -1 {base} 2>/dev/null"])  # noqa: S602
-    if listing.returncode != 0:
-        return result
-    for item in listing.stdout.splitlines():
-        item = item.strip()
-        if item:
-            result.append(f"{base}/{item}")
-    return result
+    entries = ctx.list_dir(base)
+    if not entries:
+        return []
+    return [f"{base}/{item}" for item in entries if item]
 
 
 def _collect_paths(ctx: AuditContextProtocol, base_paths: Iterable[str]) -> List[str]:
     result: List[str] = []
     for base in base_paths:
         # Сканируем только первый уровень, чтобы избежать тяжёлой рекурсии.
-        listing = ctx.run_cmd(["/bin/sh", "-c", f"ls -1 {base} 2>/dev/null"])  # noqa: S602
-        if listing.returncode != 0:
+        entries = ctx.list_dir(base)
+        if not entries:
             continue
-        for item in listing.stdout.splitlines():
-            item = item.strip()
+        for item in entries:
             if item:
                 result.append(f"{base}/{item}")
     return result
