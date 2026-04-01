@@ -14,10 +14,12 @@ def test_create_task_if_missing_verifies_created_task_when_response_empty(monkey
     }
 
     monkeypatch.setattr(client, "create_task", lambda task_payload: {})
+    calls = iter([None, {"uuid": "task-1", "name": payload["name"], "is_done": False, "assets": [{"uuid": "asset-uuid"}]}])
+
     monkeypatch.setattr(
         client,
         "find_open_task",
-        lambda name, asset_uuid=None: {"uuid": "task-1", "name": name},
+        lambda name, asset_uuid=None: next(calls),
     )
 
     task, created = client.create_task_if_missing(payload)
@@ -39,6 +41,26 @@ def test_create_task_if_missing_returns_created_task_object(monkeypatch) -> None
 
     assert created is True
     assert task["uuid"] == "task-created"
+
+
+def test_create_task_if_missing_returns_existing_task_before_post(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    payload = {
+        "name": "[FAIL] check",
+        "assets": ["asset-uuid"],
+    }
+
+    monkeypatch.setattr(
+        client,
+        "find_open_task",
+        lambda name, asset_uuid=None: {"uuid": "task-existing", "name": name, "is_done": False},
+    )
+    monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "task-created"})
+
+    task, created = client.create_task_if_missing(payload)
+
+    assert created is False
+    assert task["uuid"] == "task-existing"
 
 
 def test_create_task_if_missing_raises_when_verification_bad_request(monkeypatch) -> None:
@@ -115,6 +137,34 @@ def test_create_task_returns_empty_payload_when_response_has_no_task_object(monk
 
         def json(self):
             return {"ok": True}
+
+    monkeypatch.setattr(client.session, "post", lambda *args, **kwargs: _Response())
+    monkeypatch.setattr(client, "_raise_for_status", lambda response: None)
+
+    created = client.create_task({"name": "Task 1", "is_done": 0})
+
+    assert created == {}
+
+
+def test_create_task_ignores_task_list_response(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+
+    class _Response:
+        content = b"1"
+        is_redirect = False
+        is_permanent_redirect = False
+        headers = {}
+        status_code = 200
+        url = "https://example.test/api/v2/tasks"
+        text = '{"data":{"total":1,"objects":[{"uuid":"task-old","name":"Old task"}]}}'
+
+        def json(self):
+            return {
+                "data": {
+                    "total": 1,
+                    "objects": [{"uuid": "task-old", "name": "Old task"}],
+                }
+            }
 
     monkeypatch.setattr(client.session, "post", lambda *args, **kwargs: _Response())
     monkeypatch.setattr(client, "_raise_for_status", lambda response: None)

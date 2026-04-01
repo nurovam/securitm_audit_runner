@@ -121,11 +121,9 @@ class SecurITMClient:
         )
         self._raise_for_status(response)
         data = response.json() if response.content else {}
-        created = self._extract_first_item(data)
+        created = self._extract_task_object(data)
         if created:
             return created
-        if isinstance(data, dict) and any(key in data for key in ("uuid", "id", "name")):
-            return data
         status_code = getattr(response, "status_code", "unknown")
         response_url = getattr(response, "url", url)
         self.logger.warning(
@@ -167,24 +165,37 @@ class SecurITMClient:
                 {"assets.uuid": asset_uuid, "op": "eq"},
             ]
 
-        tasks = self.get_tasks(filters=filters)
-        for task in tasks:
-            if task.get("name") != name:
-                continue
-            if asset_uuid:
-                assets = task.get("assets") or []
-                if not isinstance(assets, list):
-                    continue
-                linked_uuids = {asset.get("uuid") for asset in assets if isinstance(asset, dict)}
-                if asset_uuid not in linked_uuids:
-                    continue
-            return task
+        try:
+            tasks = self.get_tasks(filters=filters)
+        except requests.RequestException as exc:
+            self.logger.debug("SecurITM filtered task lookup failed, fallback to unfiltered scan: %s", exc)
+        else:
+            for task in tasks:
+                if self._task_matches(task, name, asset_uuid):
+                    return task
+
+        for page in range(1, 4):
+            tasks = self.get_tasks(page=page, per_page=100)
+            for task in tasks:
+                if self._task_matches(task, name, asset_uuid):
+                    return task
+            if len(tasks) < 100:
+                break
         return None
 
     def create_task_if_missing(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
         name = str(payload.get("name") or "").strip()
         assets = payload.get("assets") or []
         asset_uuid = assets[0] if isinstance(assets, list) and assets else None
+
+        if name:
+            try:
+                existing = self.find_open_task(name, asset_uuid=asset_uuid)
+            except requests.RequestException as exc:
+                self.logger.debug("SecurITM pre-create task lookup failed: %s", exc)
+            else:
+                if existing:
+                    return existing, False
 
         created = self.create_task(payload)
         if created:
@@ -248,11 +259,30 @@ class SecurITMClient:
 
         return []
 
-    def _extract_first_item(self, payload: Any) -> Optional[Dict[str, Any]]:
-        items = self._extract_items(payload)
-        if items:
-            return items[0]
+    def _extract_task_object(self, payload: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(payload, dict):
+            if any(key in payload for key in ("uuid", "id", "name")):
+                return payload
+            data = payload.get("data")
+            if isinstance(data, dict) and not isinstance(data.get("objects"), list):
+                if any(key in data for key in ("uuid", "id", "name")):
+                    return data
         return None
+
+    def _task_matches(self, task: Dict[str, Any], name: str, asset_uuid: Optional[str]) -> bool:
+        if task.get("name") != name:
+            return False
+        is_done = task.get("is_done")
+        if is_done not in (0, False, None):
+            return False
+        if not asset_uuid:
+            return True
+
+        assets = task.get("assets") or []
+        if not isinstance(assets, list):
+            return False
+        linked_uuids = {asset.get("uuid") for asset in assets if isinstance(asset, dict)}
+        return asset_uuid in linked_uuids
 
     def _raise_for_status(self, response: requests.Response) -> None:
         try:
