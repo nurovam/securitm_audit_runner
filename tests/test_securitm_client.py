@@ -6,40 +6,33 @@ import requests
 from securitm_audit_agent.integrations.securitm import SecurITMClient
 
 
-def test_create_task_if_missing_returns_existing_task(monkeypatch) -> None:
+def test_create_task_if_missing_verifies_created_task_when_response_empty(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
     payload = {
         "name": "[FAIL] check",
         "assets": ["asset-uuid"],
     }
 
+    monkeypatch.setattr(client, "create_task", lambda task_payload: {})
     monkeypatch.setattr(
         client,
         "find_open_task",
         lambda name, asset_uuid=None: {"uuid": "task-1", "name": name},
     )
-    monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "created"})
 
     task, created = client.create_task_if_missing(payload)
 
-    assert created is False
+    assert created is True
     assert task["uuid"] == "task-1"
 
 
-def test_create_task_if_missing_creates_task_when_listing_forbidden(monkeypatch) -> None:
+def test_create_task_if_missing_returns_created_task_object(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
     payload = {
         "name": "[FAIL] check",
         "assets": ["asset-uuid"],
     }
 
-    response = requests.Response()
-    response.status_code = 403
-
-    def _raise_forbidden(name, asset_uuid=None):
-        raise requests.HTTPError("forbidden", response=response)
-
-    monkeypatch.setattr(client, "find_open_task", _raise_forbidden)
     monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "task-created"})
 
     task, created = client.create_task_if_missing(payload)
@@ -48,7 +41,7 @@ def test_create_task_if_missing_creates_task_when_listing_forbidden(monkeypatch)
     assert task["uuid"] == "task-created"
 
 
-def test_create_task_if_missing_creates_task_when_listing_bad_request(monkeypatch) -> None:
+def test_create_task_if_missing_raises_when_verification_bad_request(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
     payload = {
         "name": "[FAIL] check",
@@ -61,13 +54,16 @@ def test_create_task_if_missing_creates_task_when_listing_bad_request(monkeypatc
     def _raise_bad_request(name, asset_uuid=None):
         raise requests.HTTPError("unprocessable", response=response)
 
+    monkeypatch.setattr("securitm_audit_agent.integrations.securitm.time.sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(client, "create_task", lambda task_payload: {})
     monkeypatch.setattr(client, "find_open_task", _raise_bad_request)
-    monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "task-created"})
 
-    task, created = client.create_task_if_missing(payload)
-
-    assert created is True
-    assert task["uuid"] == "task-created"
+    try:
+        client.create_task_if_missing(payload)
+    except RuntimeError as exc:
+        assert "verification failed" in str(exc)
+    else:
+        raise AssertionError("RuntimeError was not raised")
 
 
 def test_find_asset_by_name_requests_minimal_fields(monkeypatch) -> None:
@@ -111,7 +107,7 @@ def test_get_tasks_extracts_data_objects(monkeypatch) -> None:
     assert tasks == [{"uuid": "task-1", "name": "Task 1"}]
 
 
-def test_create_task_requires_task_object(monkeypatch) -> None:
+def test_create_task_returns_empty_payload_when_response_has_no_task_object(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
 
     class _Response:
@@ -123,12 +119,9 @@ def test_create_task_requires_task_object(monkeypatch) -> None:
     monkeypatch.setattr(client.session, "post", lambda *args, **kwargs: _Response())
     monkeypatch.setattr(client, "_raise_for_status", lambda response: None)
 
-    try:
-        client.create_task({"name": "Task 1", "is_done": 0})
-    except RuntimeError as exc:
-        assert "Task creation returned no task object" in str(exc)
-    else:
-        raise AssertionError("RuntimeError was not raised")
+    created = client.create_task({"name": "Task 1", "is_done": 0})
+
+    assert created == {}
 
 
 def test_create_task_reposts_after_redirect(monkeypatch) -> None:

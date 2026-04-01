@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urljoin
 
@@ -127,10 +128,13 @@ class SecurITMClient:
             return data
         status_code = getattr(response, "status_code", "unknown")
         response_url = getattr(response, "url", url)
-        raise RuntimeError(
-            "Task creation returned no task object: "
-            f"status={status_code}, url={response_url}, body={json.dumps(data, ensure_ascii=False)}"
+        self.logger.warning(
+            "SecurITM POST tasks returned no task object status=%s url=%s body=%s",
+            status_code,
+            response_url,
+            self._short_json(data),
         )
+        return {}
 
     def get_tasks(
         self,
@@ -182,20 +186,43 @@ class SecurITMClient:
         assets = payload.get("assets") or []
         asset_uuid = assets[0] if isinstance(assets, list) and assets else None
 
-        if name:
+        created = self.create_task(payload)
+        if created:
+            return created, True
+
+        if not name:
+            raise RuntimeError("Task creation returned no task object and task name is empty")
+
+        # Поведение ближе к ранней версии: POST считается основным действием.
+        # Если API не вернул объект задачи, пробуем коротко подтвердить её создание через GET.
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
             try:
                 existing = self.find_open_task(name, asset_uuid=asset_uuid)
-            except requests.RequestException:
-                # Проверка на дубль — вспомогательный шаг.
-                # Если API не даёт список задач или не принимает фильтры,
-                # всё равно пытаемся создать задачу, чтобы не терять FAIL.
-                existing = None
+            except requests.RequestException as exc:
+                last_error = exc
+                self.logger.debug(
+                    "SecurITM task verification attempt=%s name=%s asset_uuid=%s failed: %s",
+                    attempt + 1,
+                    name,
+                    asset_uuid,
+                    exc,
+                )
             else:
                 if existing:
-                    return existing, False
+                    return existing, True
+            if attempt < 2:
+                time.sleep(1.0)
 
-        created = self.create_task(payload)
-        return created, True
+        if last_error is not None:
+            raise RuntimeError(
+                "Task creation returned no task object and verification failed: "
+                f"name={name}, asset_uuid={asset_uuid}, last_error={last_error}"
+            ) from last_error
+        raise RuntimeError(
+            "Task creation returned no task object and task is still absent after verification: "
+            f"name={name}, asset_uuid={asset_uuid}"
+        )
 
     def _extract_items(self, payload: Any) -> List[Dict[str, Any]]:
         if isinstance(payload, list):
