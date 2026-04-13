@@ -129,7 +129,7 @@ def test_get_tasks_extracts_data_objects(monkeypatch) -> None:
     assert tasks == [{"uuid": "task-1", "name": "Task 1"}]
 
 
-def test_create_task_returns_empty_payload_when_response_has_no_task_object(monkeypatch) -> None:
+def test_create_task_returns_raw_payload_when_response_has_no_task_object(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
 
     class _Response:
@@ -143,10 +143,10 @@ def test_create_task_returns_empty_payload_when_response_has_no_task_object(monk
 
     created = client.create_task({"name": "Task 1", "is_done": 0})
 
-    assert created == {}
+    assert created == {"ok": True}
 
 
-def test_create_task_ignores_task_list_response(monkeypatch) -> None:
+def test_create_task_returns_task_list_response_as_is(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
 
     class _Response:
@@ -171,7 +171,12 @@ def test_create_task_ignores_task_list_response(monkeypatch) -> None:
 
     created = client.create_task({"name": "Task 1", "is_done": 0})
 
-    assert created == {}
+    assert created == {
+        "data": {
+            "total": 1,
+            "objects": [{"uuid": "task-old", "name": "Old task"}],
+        }
+    }
 
 
 def test_create_task_reposts_after_redirect(monkeypatch) -> None:
@@ -206,6 +211,6 @@ def test_create_task_reposts_after_redirect(monkeypatch) -> None:
 
     assert created["uuid"] == "task-1"
     assert calls == [
-        "https://example.test/api/v2/tasks",
+        "https://example.test/api/v2/tasks/create",
         "https://example.test/api/v2/tasks/",
     ]

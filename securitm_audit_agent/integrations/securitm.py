@@ -90,7 +90,8 @@ class SecurITMClient:
         raise RuntimeError("Asset import did not return a visible asset")
 
     def create_task(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        url = f"{self.base_url}/api/v2/tasks"
+        # В облаке создание задач идёт через отдельный endpoint /create.
+        url = f"{self.base_url}/api/v2/tasks/create"
         self.logger.debug("SecurITM POST tasks payload=%s", self._short_json(payload))
         response = self.session.post(
             url,
@@ -120,19 +121,7 @@ class SecurITMClient:
             self._short_text(getattr(response, "text", "")),
         )
         self._raise_for_status(response)
-        data = response.json() if response.content else {}
-        created = self._extract_task_object(data)
-        if created:
-            return created
-        status_code = getattr(response, "status_code", "unknown")
-        response_url = getattr(response, "url", url)
-        self.logger.warning(
-            "SecurITM POST tasks returned no task object status=%s url=%s body=%s",
-            status_code,
-            response_url,
-            self._short_json(data),
-        )
-        return {}
+        return response.json() if response.content else {}
 
     def get_tasks(
         self,
