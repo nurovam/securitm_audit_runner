@@ -1,0 +1,76 @@
+# Скопируйте этот файл в configs/audit.yml и заполните значения под вашу среду.
+audit:
+  checks:
+    builtin: false
+    enabled:
+      - met_2_1_1_no_empty_passwords
+      - met_2_1_2_ssh_root_login
+      - met_2_2_1_su_wheel_restriction
+      - met_2_2_2_sudo_restrictions
+      - met_2_3_1_passwd_group_shadow_perms
+      - met_2_3_2_running_process_file_perms
+      - met_2_3_3_cron_jobs_file_perms
+      - met_2_3_4_sudo_exec_file_perms
+      - met_2_3_5_rc_service_perms
+      - met_2_3_6_system_cron_perms
+      - met_2_3_7_user_cron_perms
+      - met_2_3_8_system_bins_libs_perms
+      - met_2_3_9_suid_sgid_perms
+      - met_2_3_10_home_files_perms
+      - met_2_3_11_home_dirs_perms
+      - met_2_4_1_kernel_dmesg_restrict
+      - met_2_4_2_kernel_kptr_restrict
+      - met_2_4_3_init_on_alloc
+      - met_2_4_4_slab_nomerge
+      - met_2_4_5_iommu
+      - met_2_4_6_randomize_kstack_offset
+      - met_2_4_7_mitigations
+      - met_2_4_8_bpf_jit_harden
+      - met_2_5_1_vsyscall
+      - met_2_5_2_perf_event_paranoid
+      - met_2_5_3_debugfs
+      - met_2_5_4_kexec_disabled
+      - met_2_5_5_user_namespaces
+      - met_2_5_6_unpriv_bpf
+      - met_2_5_7_userfaultfd
+      - met_2_5_8_tty_ldisc_autoload
+      - met_2_5_9_tsx
+      - met_2_5_10_mmap_min_addr
+      - met_2_5_11_randomize_va_space
+      - met_2_6_1_ptrace_scope
+      - met_2_6_2_protected_symlinks
+      - met_2_6_3_protected_hardlinks
+      - met_2_6_4_protected_fifos
+      - met_2_6_5_protected_regular
+      - met_2_6_6_suid_dumpable
+  plugins:
+    - "securitm_audit_agent.plugins.met_rekom_linux"
+  output:
+    json: "audit-report.json"
+    pdf: "audit-report.pdf"
+    pdf_font_path: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+securitm:
+  enabled: false
+  base_url: "https://service.securitm.ru"
+  token_env: "SECURITM_TOKEN"
+  verify_ssl: true
+  assets:
+    asset_type_slug: "computer-xxx"
+    import_template: "Audit Agent Computers"
+    name_field: "name"
+    import_name_field: "Название"
+    import_fields:
+      Название: "{hostname}"
+      Hostname: "{hostname}"
+      IP: "{ip}"
+  tasks:
+    enabled: true
+    author_name: "audit_agent"
+    author_uuid: ""
+    responsible_uuid: ""
+    priority: 2
+    deadline_days: 7
+    name_template: "[{status}] {check_id}"
+    desc_template: "Author: {author}\\nHost: {hostname}\\nCheck: {check_id}\\nStatus: {status}\\nMessage: {message}\\nEvidence: {evidence}\\nRemediation: {remediation}"
+    desc_max_length: 5000

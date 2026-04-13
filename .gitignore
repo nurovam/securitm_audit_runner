@@ -35,3 +35,4 @@ audit-report.pdf
 
 # Work Data
 *.pdf
+configs/audit.yml
