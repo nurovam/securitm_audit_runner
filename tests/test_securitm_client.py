@@ -43,6 +43,36 @@ def test_create_task_if_missing_returns_created_task_object(monkeypatch) -> None
     assert task["uuid"] == "task-created"
 
 
+def test_create_task_if_missing_verifies_when_post_returns_task_list(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    payload = {
+        "name": "[FAIL] check",
+        "assets": ["asset-uuid"],
+    }
+
+    monkeypatch.setattr(
+        client,
+        "create_task",
+        lambda task_payload: {
+            "data": {
+                "total": 1,
+                "objects": [{"uuid": "task-old", "name": "Old task"}],
+            }
+        },
+    )
+    calls = iter([None, {"uuid": "task-created", "name": payload["name"], "is_done": False, "assets": [{"uuid": "asset-uuid"}]}])
+    monkeypatch.setattr(
+        client,
+        "find_open_task",
+        lambda name, asset_uuid=None: next(calls),
+    )
+
+    task, created = client.create_task_if_missing(payload)
+
+    assert created is True
+    assert task["uuid"] == "task-created"
+
+
 def test_create_task_if_missing_returns_existing_task_before_post(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
     payload = {

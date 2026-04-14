@@ -187,8 +187,15 @@ class SecurITMClient:
                     return existing, False
 
         created = self.create_task(payload)
+        created_task = self._extract_task_object(created)
+        if created_task:
+            return created_task, True
         if created:
-            return created, True
+            self.logger.warning(
+                "SecurITM POST tasks returned no task object status=200 url=%s body=%s",
+                f"{self.base_url}/api/v2/tasks/create",
+                self._short_json(created),
+            )
 
         if not name:
             raise RuntimeError("Task creation returned no task object and task name is empty")

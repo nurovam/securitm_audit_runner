@@ -78,6 +78,20 @@ def _read_passwd(ctx: AuditContextProtocol) -> List[Tuple[str, str, str]]:
     return users
 
 
+def _is_interactive_home_user(home: str, shell: str) -> bool:
+    """Ограничиваем проверку реальными пользовательскими home-каталогами.
+
+    Иначе baseline начинает шуметь на системных аккаунтах с shell вида
+    nologin/false и путями вроде /usr/sbin или /bin.
+    """
+    if not home or home == "/":
+        return False
+    if home == "/root" or home.startswith("/home/"):
+        shell_name = shell.rsplit("/", 1)[-1]
+        return shell_name not in {"nologin", "false", "sync", "halt", "shutdown"}
+    return False
+
+
 def _iter_sudoers_lines(ctx: AuditContextProtocol) -> Iterable[Tuple[str, str]]:
     # Читаем sudoers и include-каталог, если он есть.
     paths = ["/etc/sudoers"]
@@ -467,7 +481,7 @@ class MetHomeFilesPermsCheck(MetCheck):
         users = _read_passwd(ctx)
         bad: List[str] = []
         for user, home, _shell in users:
-            if not home or home == "/":
+            if not _is_interactive_home_user(home, _shell):
                 continue
             for name in targets:
                 path = f"{home}/{name}"
@@ -498,7 +512,7 @@ class MetHomeDirsPermsCheck(MetCheck):
         users = _read_passwd(ctx)
         bad: List[str] = []
         for user, home, _shell in users:
-            if not home or home == "/":
+            if not _is_interactive_home_user(home, _shell):
                 continue
             mode = _mode(ctx, home)
             if mode is None:

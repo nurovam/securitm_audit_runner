@@ -8,13 +8,9 @@ audit:
       - met_2_2_1_su_wheel_restriction
       - met_2_2_2_sudo_restrictions
       - met_2_3_1_passwd_group_shadow_perms
-      - met_2_3_2_running_process_file_perms
-      - met_2_3_3_cron_jobs_file_perms
-      - met_2_3_4_sudo_exec_file_perms
       - met_2_3_5_rc_service_perms
       - met_2_3_6_system_cron_perms
       - met_2_3_7_user_cron_perms
-      - met_2_3_8_system_bins_libs_perms
       - met_2_3_9_suid_sgid_perms
       - met_2_3_10_home_files_perms
       - met_2_3_11_home_dirs_perms
@@ -43,6 +39,13 @@ audit:
       - met_2_6_4_protected_fifos
       - met_2_6_5_protected_regular
       - met_2_6_6_suid_dumpable
+    # Optional manual-only checks.
+    # They return SKIP by design and should be enabled only when you want
+    # them visible in the report as review reminders.
+    #   - met_2_3_2_running_process_file_perms
+    #   - met_2_3_3_cron_jobs_file_perms
+    #   - met_2_3_4_sudo_exec_file_perms
+    #   - met_2_3_8_system_bins_libs_perms
   plugins:
     - "securitm_audit_agent.plugins.met_rekom_linux"
   output:
@@ -69,6 +72,7 @@ securitm:
     author_name: "audit_agent"
     author_uuid: ""
     responsible_uuid: ""
+    fallback_output_json: "securitm-task-fallback.json"
     priority: 2
     deadline_days: 7
     name_template: "[{status}] {check_id}"
