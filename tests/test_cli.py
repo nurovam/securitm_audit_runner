@@ -59,7 +59,7 @@ def test_sync_fail_tasks_logs_existing_task_without_false_success(caplog) -> Non
     with caplog.at_level(logging.INFO):
         _sync_fail_tasks(client, report, {"author_name": "agent"}, {"hostname": "host"}, "asset-1")
 
-    assert "Open task already exists for check_existing" in caplog.text
+    assert "Task for check_existing already exists and is still open; skipping duplicate creation" in caplog.text
     assert "Created task for check_existing" not in caplog.text
     assert len(client.payloads) == 1
 

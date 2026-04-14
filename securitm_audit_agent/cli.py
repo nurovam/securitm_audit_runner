@@ -186,7 +186,10 @@ def _sync_fail_tasks(
         if created:
             logging.info("Created task for %s", result.check_id)
         else:
-            logging.info("Open task already exists for %s", result.check_id)
+            logging.info(
+                "Task for %s already exists and is still open; skipping duplicate creation",
+                result.check_id,
+            )
     return unsynced
 
 
