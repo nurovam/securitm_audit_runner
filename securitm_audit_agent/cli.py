@@ -26,11 +26,13 @@ import os
 import sys
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
+
+import requests
 
 from securitm_audit_agent import __version__
 from securitm_audit_agent.checks import register_builtin_checks
-from securitm_audit_agent.config import load_config
+from securitm_audit_agent.config import load_config, resolve_config_path
 from securitm_audit_agent.core import AuditRunner, CheckRegistry, Status
 from securitm_audit_agent.platform import AuditContext
 
@@ -137,6 +139,67 @@ def _load_plugins(registry: CheckRegistry, plugins: Any) -> None:
         register(registry)
 
 
+def _sync_fail_tasks(
+    client,
+    report,
+    tasks_cfg: Mapping[str, Any],
+    host: Mapping[str, Any],
+    asset_uuid: Optional[str],
+) -> List[Dict[str, Any]]:
+    """Создаёт или находит открытые задачи только для FAIL-результатов.
+
+    Возвращает список задач, которые не удалось синхронизировать с API и которые
+    можно сохранить в fallback-файл для ручной обработки.
+    """
+    unsynced: List[Dict[str, Any]] = []
+    for result in report.results:
+        if result.status != Status.FAIL:
+            continue
+
+        payload = _build_task_payload(result, tasks_cfg, host, asset_uuid)
+        logging.debug("Task sync payload for %s: %s", result.check_id, json.dumps(payload, ensure_ascii=False))
+        try:
+            _task, created = client.create_task_if_missing(payload)
+        except requests.HTTPError as exc:
+            logging.error("Failed to sync task for %s: %s", result.check_id, exc)
+            unsynced.append(
+                {
+                    "check_id": result.check_id,
+                    "host": dict(host),
+                    "payload": payload,
+                    "error": str(exc),
+                }
+            )
+            continue
+        except (requests.RequestException, RuntimeError, ValueError) as exc:
+            logging.error("Failed to sync task for %s: %s", result.check_id, exc)
+            unsynced.append(
+                {
+                    "check_id": result.check_id,
+                    "host": dict(host),
+                    "payload": payload,
+                    "error": str(exc),
+                }
+            )
+            continue
+
+        if created:
+            logging.info("Created task for %s", result.check_id)
+        else:
+            logging.info(
+                "Task for %s already exists and is still open; skipping duplicate creation",
+                result.check_id,
+            )
+    return unsynced
+
+
+def _write_unsynced_tasks(path: str, tasks: List[Dict[str, Any]]) -> None:
+    Path(path).write_text(
+        json.dumps({"generated_at": date.today().isoformat(), "tasks": tasks}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Linux audit runner (core)")
     parser.add_argument("-c", "--config", default="configs/audit.yml")
@@ -153,7 +216,20 @@ def main() -> None:
         log_level = logging.DEBUG
     logging.basicConfig(level=log_level, format="%(levelname)s %(message)s")
 
-    config = load_config(args.config)
+    try:
+        config_path, used_example = resolve_config_path(args.config)
+        config = load_config(config_path)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        logging.error("%s", exc)
+        sys.exit(2)
+
+    if used_example:
+        logging.warning(
+            "Config %s not found; using template %s. Copy the template to %s to customize local settings.",
+            args.config,
+            config_path,
+            args.config,
+        )
 
     registry = CheckRegistry()
     builtin_enabled = _get_nested(config, ["audit", "checks", "builtin"], True)
@@ -221,7 +297,6 @@ def main() -> None:
         logging.error("securitm.base_url is not set")
         sys.exit(2)
 
-    import requests
     verify_ssl = bool(securitm_cfg.get("verify_ssl", True))
     from securitm_audit_agent.integrations import SecurITMClient
 
@@ -274,20 +349,11 @@ def main() -> None:
     if not tasks_cfg.get("enabled", True):
         return
 
-    for result in report.results:
-        if result.status != Status.FAIL:
-            continue
-        payload = _build_task_payload(result, tasks_cfg, ctx.host_facts, asset_uuid)
-        logging.debug("Task sync payload for %s: %s", result.check_id, json.dumps(payload, ensure_ascii=False))
-        try:
-            client.create_task(payload)
-        except requests.HTTPError as exc:
-            logging.error("Failed to sync task for %s: %s", result.check_id, exc)
-            continue
-        except (requests.RequestException, RuntimeError, ValueError) as exc:
-            logging.error("Failed to sync task for %s: %s", result.check_id, exc)
-            continue
-        logging.info("Created task for %s", result.check_id)
+    unsynced_tasks = _sync_fail_tasks(client, report, tasks_cfg, ctx.host_facts, asset_uuid)
+    fallback_output_path = tasks_cfg.get("fallback_output_json")
+    if unsynced_tasks and fallback_output_path:
+        _write_unsynced_tasks(str(fallback_output_path), unsynced_tasks)
+        logging.warning("Unsynced task payloads saved to %s", fallback_output_path)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-import time
+import re
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urljoin
 
@@ -11,6 +11,9 @@ import requests
 
 
 class SecurITMClient:
+    _STATUS_PREFIX_RE = re.compile(r"^\[(?P<status>[A-Z]+)\]\s+(?P<rest>.+)$")
+    _HOST_LINE_RE = re.compile(r"^Host:\s*(?P<host>.+)$", re.MULTILINE)
+
     def __init__(self, base_url: str, token: str, verify_ssl: bool = True, timeout: int = 30) -> None:
         self.logger = logging.getLogger(__name__)
         self.base_url = base_url.rstrip("/")
@@ -142,87 +145,41 @@ class SecurITMClient:
         payload = response.json()
         return self._extract_items(payload)
 
-    def find_open_task(self, name: str, asset_uuid: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def find_open_task(self, name: str, host_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
         filters: Dict[str, Any] = {
             "fields": [
-                {"name": name, "op": "eq"},
+                {"name": self._normalize_task_name(name), "op": "eq"},
                 {"is_done": 0, "op": "eq"},
             ]
         }
-        if asset_uuid:
-            filters["relations"] = [
-                {"assets.uuid": asset_uuid, "op": "eq"},
-            ]
-
-        try:
-            tasks = self.get_tasks(filters=filters)
-        except requests.RequestException as exc:
-            self.logger.debug("SecurITM filtered task lookup failed, fallback to unfiltered scan: %s", exc)
-        else:
-            for task in tasks:
-                if self._task_matches(task, name, asset_uuid):
-                    return task
-
-        for page in range(1, 4):
-            tasks = self.get_tasks(page=page, per_page=100)
-            for task in tasks:
-                if self._task_matches(task, name, asset_uuid):
-                    return task
-            if len(tasks) < 100:
-                break
+        tasks = self.get_tasks(filters=filters, per_page=100)
+        for task in tasks:
+            if self._task_matches(task, name, host_name):
+                return task
         return None
 
     def create_task_if_missing(self, payload: Dict[str, Any]) -> tuple[Dict[str, Any], bool]:
         name = str(payload.get("name") or "").strip()
-        assets = payload.get("assets") or []
-        asset_uuid = assets[0] if isinstance(assets, list) and assets else None
+        host_name = self._extract_host_from_desc(payload.get("desc"))
 
         if name:
-            try:
-                existing = self.find_open_task(name, asset_uuid=asset_uuid)
-            except requests.RequestException as exc:
-                self.logger.debug("SecurITM pre-create task lookup failed: %s", exc)
-            else:
-                if existing:
-                    return existing, False
+            existing = self.find_open_task(name, host_name=host_name)
+            if existing:
+                return existing, False
 
         created = self.create_task(payload)
+        created_task = self._extract_task_object(created)
+        if created_task:
+            return created_task, True
         if created:
-            return created, True
-
-        if not name:
-            raise RuntimeError("Task creation returned no task object and task name is empty")
-
-        # Поведение ближе к ранней версии: POST считается основным действием.
-        # Если API не вернул объект задачи, пробуем коротко подтвердить её создание через GET.
-        last_error: Optional[Exception] = None
-        for attempt in range(3):
-            try:
-                existing = self.find_open_task(name, asset_uuid=asset_uuid)
-            except requests.RequestException as exc:
-                last_error = exc
-                self.logger.debug(
-                    "SecurITM task verification attempt=%s name=%s asset_uuid=%s failed: %s",
-                    attempt + 1,
-                    name,
-                    asset_uuid,
-                    exc,
-                )
-            else:
-                if existing:
-                    return existing, True
-            if attempt < 2:
-                time.sleep(1.0)
-
-        if last_error is not None:
-            raise RuntimeError(
-                "Task creation returned no task object and verification failed: "
-                f"name={name}, asset_uuid={asset_uuid}, last_error={last_error}"
-            ) from last_error
-        raise RuntimeError(
-            "Task creation returned no task object and task is still absent after verification: "
-            f"name={name}, asset_uuid={asset_uuid}"
-        )
+            self.logger.warning(
+                "SecurITM POST tasks returned no task object status=200 url=%s body=%s",
+                f"{self.base_url}/api/v2/tasks/create",
+                self._short_json(created),
+            )
+        # Дедупликация выполняется только одним предварительным GET по имени.
+        # После POST дополнительных GET не делаем.
+        return {"name": name} if name else {}, True
 
     def _extract_items(self, payload: Any) -> List[Dict[str, Any]]:
         if isinstance(payload, list):
@@ -258,20 +215,34 @@ class SecurITMClient:
                     return data
         return None
 
-    def _task_matches(self, task: Dict[str, Any], name: str, asset_uuid: Optional[str]) -> bool:
-        if task.get("name") != name:
+    def _task_matches(self, task: Dict[str, Any], name: str, host_name: Optional[str] = None) -> bool:
+        task_name = str(task.get("name") or "").strip()
+        if self._normalize_task_name(task_name) != self._normalize_task_name(name):
             return False
         is_done = task.get("is_done")
         if is_done not in (0, False, None):
             return False
-        if not asset_uuid:
-            return True
+        if host_name:
+            task_host = self._extract_host_from_desc(task.get("desc"))
+            if task_host != host_name:
+                return False
+        return True
 
-        assets = task.get("assets") or []
-        if not isinstance(assets, list):
-            return False
-        linked_uuids = {asset.get("uuid") for asset in assets if isinstance(asset, dict)}
-        return asset_uuid in linked_uuids
+    def _normalize_task_name(self, name: str) -> str:
+        normalized = name.strip()
+        match = self._STATUS_PREFIX_RE.match(normalized)
+        if not match:
+            return normalized
+        return f"{match.group('status')} {match.group('rest').strip()}"
+
+    def _extract_host_from_desc(self, desc: Any) -> Optional[str]:
+        if not isinstance(desc, str):
+            return None
+        match = self._HOST_LINE_RE.search(desc)
+        if not match:
+            return None
+        host = match.group("host").strip().lower()
+        return host or None
 
     def _raise_for_status(self, response: requests.Response) -> None:
         try:

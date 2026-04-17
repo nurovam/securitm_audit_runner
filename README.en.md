@@ -7,15 +7,17 @@ and SecurITM integration.
 
 The project already supports:
 - local Linux security checks;
+- `AuditReport` generation;
 - JSON report generation;
 - optional PDF report generation;
 - host asset lookup/creation in SecurITM;
-- task creation attempts in SecurITM for `FAIL` results.
+- creating or reusing open SecurITM tasks for `FAIL` results;
+- writing a fallback JSON file for tasks that could not be synced via the API.
 
 Important caveats:
 - the working config is **not** tracked in Git;
 - the repository only ships `configs/audit.yml.example`;
-- SecurITM task creation is currently the least reliable part of the project because it depends on real cloud API behavior.
+- SecurITM task creation remains the least reliable part of the project because it depends on real cloud API behavior.
 
 ## First Run
 
@@ -31,7 +33,9 @@ Then fill in:
 - import template;
 - `author_uuid` / `responsible_uuid` if needed.
 
-Without this step the CLI default path will fail, because it still expects `configs/audit.yml`.
+Important:
+- for `--dry-run` and basic project inspection the CLI can fall back to `configs/audit.yml.example` if `configs/audit.yml` is still missing;
+- for real local settings and SecurITM integration you still need your own `configs/audit.yml`.
 
 ## Quick Start From the Repository
 
@@ -39,9 +43,16 @@ Without this step the CLI default path will fail, because it still expects `conf
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
+pip install ".[pdf]"   # optional, only if you need PDF output
 cp configs/audit.yml.example configs/audit.yml
 python -m securitm_audit_agent -c configs/audit.yml --dry-run
 python -m securitm_audit_agent -c configs/audit.yml -o audit-report.json
+```
+
+Quick inspection from a clean clone:
+
+```bash
+python -m securitm_audit_agent --dry-run
 ```
 
 ## Package Installation
@@ -134,6 +145,8 @@ For Cyrillic text you need a TTF font with Cyrillic support, for example:
 
 If `reportlab` or the configured font is unavailable, JSON output will still be produced and the PDF failure will only be logged.
 
+`requirements.txt` only contains the core runtime dependencies. PDF support is enabled separately via the `.[pdf]` extra.
+
 ## Plugins
 
 The repository currently ships a baseline plugin:
@@ -145,6 +158,8 @@ securitm_audit_agent.plugins.met_rekom_linux
 It implements a baseline set of Linux hardening checks.
 Some requirements are still manual-only and return `SKIP`.
 See `docs/MANUAL_CHECKS.md`.
+Manual-only checks are **not** enabled in `configs/audit.yml.example` by default,
+so the baseline profile stays fully automatic and the first run is less noisy.
 
 ## SecurITM Integration
 
@@ -165,11 +180,13 @@ Important config keys:
 - `securitm.assets.import_fields`
 - `securitm.tasks.author_uuid`
 - `securitm.tasks.responsible_uuid`
+- `securitm.tasks.fallback_output_json`
 
 ## Known Limitations
 
-- The CLI still expects a prepared `configs/audit.yml` by default.
+- The CLI can bootstrap from `configs/audit.yml.example`, but a real local `configs/audit.yml` is still required for customized runs and API integration.
 - SecurITM task creation is not fully reliable yet because the cloud API behavior does not always match the public documentation.
+- When the task API fails, the agent can save unsynced task payloads into `securitm-task-fallback.json` for manual follow-up.
 - Some baseline checks are intentionally manual and return `SKIP`.
 - Some baseline checks may be noisy on system accounts and system-owned paths.
 

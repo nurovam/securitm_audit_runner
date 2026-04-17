@@ -11,12 +11,13 @@
 - сохранять отчёты в JSON;
 - сохранять PDF-отчёт при наличии зависимостей;
 - искать и создавать актив в SecurITM;
-- пытаться создавать задачи в SecurITM по результатам `FAIL`.
+- создавать или переиспользовать открытые задачи в SecurITM по результатам `FAIL`;
+- сохранять fallback JSON для задач, которые не удалось синхронизировать с API.
 
 Что важно понимать:
 - рабочий конфиг **не хранится** в Git;
 - в репозитории хранится только шаблон `configs/audit.yml.example`;
-- создание задач в SecurITM зависит от фактического поведения облачного API и пока считается самым нестабильным участком проекта.
+- создание задач в SecurITM зависит от фактического поведения облачного API и остаётся самым нестабильным участком проекта.
 
 ## Управление Проектом
 
@@ -40,7 +41,9 @@ cp configs/audit.yml.example configs/audit.yml
 - шаблон импорта;
 - при необходимости `author_uuid` / `responsible_uuid`.
 
-Без этого шага CLI по умолчанию не стартует, потому что ищет `configs/audit.yml`.
+Важно:
+- для `--dry-run` и чтения структуры проекта CLI умеет использовать `configs/audit.yml.example`, если `configs/audit.yml` ещё не создан;
+- для реальной локальной настройки и интеграции с SecurITM всё равно нужен собственный `configs/audit.yml`.
 
 ## Быстрый старт из репозитория
 
@@ -48,9 +51,16 @@ cp configs/audit.yml.example configs/audit.yml
 python -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
+pip install ".[pdf]"   # опционально, если нужен PDF-отчёт
 cp configs/audit.yml.example configs/audit.yml
 python -m securitm_audit_agent -c configs/audit.yml --dry-run
 python -m securitm_audit_agent -c configs/audit.yml -o audit-report.json
+```
+
+Быстрый просмотр из чистого клона:
+
+```bash
+python -m securitm_audit_agent --dry-run
 ```
 
 ## Установка пакета
@@ -147,6 +157,9 @@ PDF включается через `audit.output.pdf`.
 Если `reportlab` или шрифт недоступны, JSON-отчёт всё равно будет создан,
 а ошибка PDF будет только залогирована.
 
+`requirements.txt` содержит только базовые runtime-зависимости. Поддержка PDF
+подключается отдельно через extra `.[pdf]`.
+
 ## Плагины
 
 В проект включён базовый плагин:
@@ -158,6 +171,8 @@ securitm_audit_agent.plugins.met_rekom_linux
 Он покрывает набор baseline-проверок по методическим рекомендациям для Linux.
 Часть требований остаётся manual-only и возвращает `SKIP`.
 Подробности вынесены в `docs/MANUAL_CHECKS.md`.
+По умолчанию manual-only проверки **не** включены в `configs/audit.yml.example`,
+чтобы baseline-профиль оставался автоматическим и не зашумлял first-run.
 
 Подключение плагина через конфиг:
 
@@ -194,11 +209,13 @@ export SECURITM_TOKEN="ВАШ_ТОКЕН"
 - `securitm.assets.import_fields` — поля импорта, обычно через `{hostname}`, `{fqdn}`, `{ip}`.
 - `securitm.tasks.author_uuid` — UUID автора задачи.
 - `securitm.tasks.responsible_uuid` — UUID ответственного.
+- `securitm.tasks.fallback_output_json` — JSON-файл для задач, которые не удалось синхронизировать с API.
 
 ## Известные ограничения
 
-- CLI по умолчанию ожидает уже подготовленный `configs/audit.yml`.
+- CLI по умолчанию работает и от `configs/audit.yml.example`, но для реальной локальной настройки и интеграции нужен собственный `configs/audit.yml`.
 - Создание задач в SecurITM пока нельзя считать полностью надёжным: облачный API в разных сценариях ведёт себя нестабильно.
+- При сбое task API агент может сохранить неотправленные payload в `securitm-task-fallback.json` для ручной обработки.
 - Часть baseline-checks остаётся ручной и возвращает `SKIP`.
 - Часть baseline-checks может давать шумные `FAIL` на системных аккаунтах и специфичных системных путях.
 

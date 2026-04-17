@@ -32,6 +32,7 @@ Thumbs.db
 # Reports
 audit-report.json
 audit-report.pdf
+securitm-task-fallback.json
 
 # Work Data
 *.pdf

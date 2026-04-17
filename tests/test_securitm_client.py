@@ -6,7 +6,7 @@ import requests
 from securitm_audit_agent.integrations.securitm import SecurITMClient
 
 
-def test_create_task_if_missing_verifies_created_task_when_response_empty(monkeypatch) -> None:
+def test_create_task_if_missing_returns_created_marker_when_response_empty(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
     payload = {
         "name": "[FAIL] check",
@@ -14,18 +14,12 @@ def test_create_task_if_missing_verifies_created_task_when_response_empty(monkey
     }
 
     monkeypatch.setattr(client, "create_task", lambda task_payload: {})
-    calls = iter([None, {"uuid": "task-1", "name": payload["name"], "is_done": False, "assets": [{"uuid": "asset-uuid"}]}])
-
-    monkeypatch.setattr(
-        client,
-        "find_open_task",
-        lambda name, asset_uuid=None: next(calls),
-    )
+    monkeypatch.setattr(client, "find_open_task", lambda name, host_name=None: None)
 
     task, created = client.create_task_if_missing(payload)
 
     assert created is True
-    assert task["uuid"] == "task-1"
+    assert task == {"name": payload["name"]}
 
 
 def test_create_task_if_missing_returns_created_task_object(monkeypatch) -> None:
@@ -36,11 +30,37 @@ def test_create_task_if_missing_returns_created_task_object(monkeypatch) -> None
     }
 
     monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "task-created"})
+    monkeypatch.setattr(client, "find_open_task", lambda name, host_name=None: None)
 
     task, created = client.create_task_if_missing(payload)
 
     assert created is True
     assert task["uuid"] == "task-created"
+
+
+def test_create_task_if_missing_returns_created_marker_when_post_returns_task_list(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    payload = {
+        "name": "[FAIL] check",
+        "assets": ["asset-uuid"],
+    }
+
+    monkeypatch.setattr(
+        client,
+        "create_task",
+        lambda task_payload: {
+            "data": {
+                "total": 1,
+                "objects": [{"uuid": "task-old", "name": "Old task"}],
+            }
+        },
+    )
+    monkeypatch.setattr(client, "find_open_task", lambda name, host_name=None: None)
+
+    task, created = client.create_task_if_missing(payload)
+
+    assert created is True
+    assert task == {"name": payload["name"]}
 
 
 def test_create_task_if_missing_returns_existing_task_before_post(monkeypatch) -> None:
@@ -53,7 +73,7 @@ def test_create_task_if_missing_returns_existing_task_before_post(monkeypatch) -
     monkeypatch.setattr(
         client,
         "find_open_task",
-        lambda name, asset_uuid=None: {"uuid": "task-existing", "name": name, "is_done": False},
+        lambda name, host_name=None: {"uuid": "task-existing", "name": name, "is_done": False},
     )
     monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "task-created"})
 
@@ -63,7 +83,93 @@ def test_create_task_if_missing_returns_existing_task_before_post(monkeypatch) -
     assert task["uuid"] == "task-existing"
 
 
-def test_create_task_if_missing_raises_when_verification_bad_request(monkeypatch) -> None:
+def test_find_open_task_accepts_filtered_result_and_matches_host_from_desc(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    calls = []
+
+    def _get_tasks(filters=None, page=1, per_page=100):
+        calls.append({"filters": filters, "page": page, "per_page": per_page})
+        if filters is not None:
+            return [
+                {
+                    "uuid": "task-existing",
+                    "name": "[FAIL] check",
+                    "is_done": False,
+                    "desc": "Author: audit_agent\nHost: kalipurple\nStatus: FAIL",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(client, "get_tasks", _get_tasks)
+
+    task = client.find_open_task("[FAIL] check", host_name="kalipurple")
+
+    assert task is not None
+    assert task["uuid"] == "task-existing"
+    assert calls[0]["filters"]["fields"] == [
+        {"name": "FAIL check", "op": "eq"},
+        {"is_done": 0, "op": "eq"},
+    ]
+    assert calls[0]["per_page"] == 100
+    assert len(calls) == 1
+
+
+def test_find_open_task_uses_name_and_status_filters_without_asset(monkeypatch) -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+    calls = []
+
+    def _get_tasks(filters=None, page=1, per_page=100):
+        calls.append({"filters": filters, "page": page, "per_page": per_page})
+        return [{"uuid": "task-existing", "name": "[FAIL] check", "is_done": False}]
+
+    monkeypatch.setattr(client, "get_tasks", _get_tasks)
+
+    task = client.find_open_task("[FAIL] check", host_name=None)
+
+    assert task is not None
+    assert task["uuid"] == "task-existing"
+    assert calls[0]["filters"]["fields"] == [
+        {"name": "FAIL check", "op": "eq"},
+        {"is_done": 0, "op": "eq"},
+    ]
+    assert calls[0]["per_page"] == 100
+    assert len(calls) == 1
+
+
+def test_task_match_normalizes_bracketed_status_prefix() -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+
+    task = {
+        "uuid": "task-existing",
+        "name": "FAIL met_2_1_2_ssh_root_login",
+        "is_done": False,
+    }
+
+    assert client._task_matches(task, "[FAIL] met_2_1_2_ssh_root_login") is True
+
+
+def test_task_match_requires_same_host_when_host_is_present() -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+
+    task = {
+        "uuid": "task-existing",
+        "name": "FAIL met_2_1_2_ssh_root_login",
+        "is_done": False,
+        "desc": "Author: audit_agent\nHost: other-host\nStatus: FAIL",
+    }
+
+    assert client._task_matches(task, "[FAIL] met_2_1_2_ssh_root_login", host_name="kalipurple") is False
+
+
+def test_extract_host_from_desc_parses_host_line() -> None:
+    client = SecurITMClient(base_url="https://example.test", token="token")
+
+    host = client._extract_host_from_desc("Author: audit_agent\nHost: KaliPurple\nStatus: FAIL")
+
+    assert host == "kalipurple"
+
+
+def test_create_task_if_missing_raises_when_precheck_lookup_fails(monkeypatch) -> None:
     client = SecurITMClient(base_url="https://example.test", token="token")
     payload = {
         "name": "[FAIL] check",
@@ -73,19 +179,18 @@ def test_create_task_if_missing_raises_when_verification_bad_request(monkeypatch
     response = requests.Response()
     response.status_code = 422
 
-    def _raise_bad_request(name, asset_uuid=None):
+    def _raise_bad_request(name, host_name=None):
         raise requests.HTTPError("unprocessable", response=response)
 
-    monkeypatch.setattr("securitm_audit_agent.integrations.securitm.time.sleep", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(client, "create_task", lambda task_payload: {})
     monkeypatch.setattr(client, "find_open_task", _raise_bad_request)
+    monkeypatch.setattr(client, "create_task", lambda task_payload: {"uuid": "task-created"})
 
     try:
         client.create_task_if_missing(payload)
-    except RuntimeError as exc:
-        assert "verification failed" in str(exc)
+    except requests.HTTPError as exc:
+        assert "unprocessable" in str(exc)
     else:
-        raise AssertionError("RuntimeError was not raised")
+        raise AssertionError("HTTPError was not raised")
 
 
 def test_find_asset_by_name_requests_minimal_fields(monkeypatch) -> None:

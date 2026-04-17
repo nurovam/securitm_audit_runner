@@ -21,8 +21,14 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install ".[dev]"
 
+      - name: Run lint
+        run: python -m ruff check .
+
       - name: Compile package
         run: python -m compileall securitm_audit_agent
+
+      - name: Smoke test first run
+        run: python -m securitm_audit_agent --dry-run
 
       - name: Run tests
         run: pytest
